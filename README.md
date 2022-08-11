@@ -37,10 +37,9 @@ new WP_Field([
 ], 'option', 'option_name');
 </pre>
 
-Result: https://i.imgur.com/InOwHBN.png
 
 ### Text field:
-type: option
+option
 
 <pre>
 new WP_Field([
@@ -54,11 +53,8 @@ new WP_Field([
 ], 'option', 'option_name');
 </pre>
 
-Result:
 
----
-
-type: post 
+post meta
 
 <pre>
 new WP_Field([
