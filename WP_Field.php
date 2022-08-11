@@ -2,12 +2,15 @@
 /**
  * Plugin Name: Universal html field generator for WP
  * Plugin URI: https://rwsite.ru
- * Description: Library. Universal HTML field generator for WordPress. See usage examples in radme.md
+ * Description: Library. Universal HTML field generator for WordPress. See usage examples in readme.md
  * Version: 1.0.0
  * Author: Aleksey Tikhomirov
  * Author URI: https://rwsite.ru
  * Text Domain: wp-field
- * Domain Path: /lang
+ * Domain Path: /lang/
+ *
+ * Requires at least: 4.6
+ * Requires PHP: 7.0
  *
  * @package wp-field
  */
@@ -81,7 +84,7 @@ class WP_Field
             '<label class="checkbox-label"><input %s id="%s" name="%s" type="checkbox"> %s</label>',
             $this->checked( $field ),
             $field['id'], $field['id'],
-            isset( $field['title'] ) ? $field['title'] : ''
+            $field['title'] ?? ''
         );
         $this->description($field);
     }
@@ -107,6 +110,7 @@ class WP_Field
         if ( $field['type'] === 'media' ) {
             $field['type'] = 'text';
         }
+
         if ( isset( $field['color-picker'] ) ) {
             $field['class'] = 'rwp-color-picker';
         }
