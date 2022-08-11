@@ -16,7 +16,7 @@ Universal generator of HTML fields. Library for WordPress.
 ]
 </pre>
 
-`type`: post, options, term, user, comment
+`type`: 'option', 'post', 'comment', 'term', 'user', or any other object type with an associated meta table.
 
 `db_name`: option name in DB for getting value
 
