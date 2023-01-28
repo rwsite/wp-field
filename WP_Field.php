@@ -399,7 +399,7 @@ class WP_Field
      * show-labels: true  Показ описания под картинкой
      * masonry:     true  CSS Masonry
      * TODO: option as array
-     * 
+     *
      * @param array $field options as k => src
      * @return void
      */
