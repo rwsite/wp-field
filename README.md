@@ -8,11 +8,9 @@ It will save you time, does not burden the WordPress and is very simple!!!
 
 1. Upload it as WordPress plugin or as dependency
 2. Create new field: 
- `new WP_Field([
-   'id'          => 'text_field',
-   'type'        => 'text',
-   'label'       => 'Label'
-   ], 'option', 'option_name');`
+
+ `new WP_Field(['id'=>'text_field','type'=>'text','label'=>'Label'], 'option', 'option_name');`
+
 4. View result https://i.imgur.com/85ABxQR.png
 
 ## How to use with params
