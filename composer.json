@@ -1,0 +1,14 @@
+{
+  "name": "rwsite/wp-field",
+  "description": "WP library plugin. Universal HTML field generator for WordPress. See usage examples in readme.md",
+  "minimum-stability": "stable",
+  "license": "proprietary",
+  "authors": [
+    {
+      "name": "Aleksei Tikhomirov",
+      "email": "alex@rwsite.ru"
+    }
+  ],
+  "require": {
+  }
+}

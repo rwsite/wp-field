@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Universal html field generator for WP
  * Plugin URI:  https://rwsite.ru
- * Description: Library. Universal HTML field generator for WordPress. See usage examples in readme.md
+ * Description: WP library plugin. Universal HTML field generator for WordPress. See usage examples in readme.md
  * Version:     1.1.0
  * Author:      Aleksei Tikhomirov
  * Author URI:  https://rwsite.ru
