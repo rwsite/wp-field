@@ -3,6 +3,7 @@
   "description": "WP library plugin. Universal HTML field generator for WordPress. See usage examples in readme.md",
   "minimum-stability": "stable",
   "license": "proprietary",
+  "type": "wordpress-plugin",
   "authors": [
     {
       "name": "Aleksei Tikhomirov",
