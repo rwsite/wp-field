@@ -1,6 +1,6 @@
-# WP_Field Tests
+# WP_Field Tests v2.4.11
 
-Полное покрытие WP_Field v2.0 тестами Pest.
+Тесты для проверки функциональности WP_Field v2.4.11 со всеми 38 типами полей.
 
 ## Структура тестов
 
@@ -19,15 +19,16 @@ tests/
 
 ## Запуск тестов
 
-### Установка зависимостей
+### Простой способ (CLI)
+
+```bash
+php test-wp-field-v2.4.php
+```
+
+### Запуск всех тестов (Pest)
 
 ```bash
 composer install
-```
-
-### Запуск всех тестов
-
-```bash
 ./vendor/bin/pest
 ```
 
@@ -46,7 +47,7 @@ composer install
 ### Запуск с фильтром
 
 ```bash
-./vendor/bin/pest --filter "it_renders_text_field"
+./vendor/bin/pest --filter "accordion"
 ```
 
 ## Тестовые сценарии
@@ -132,25 +133,56 @@ composer install
 - ✅ Рендер с user storage
 - ✅ Рендер с comment storage
 
+## Тесты v2.4.11
+
+### Основные тесты
+
+- ✅ Field types registry initialization
+- ✅ Text field rendering
+- ✅ Select field rendering
+- ✅ Dependency evaluation
+
+### Тесты v2.2 (Accordion, Tabbed и т.д.)
+
+- ✅ Accordion field rendering
+- ✅ Tabbed field rendering
+- ✅ Icon field rendering
+- ✅ Repeater field rendering
+- ✅ Color picker field rendering
+
+### Тесты v2.3 (Code Editor, Map и т.д.)
+
+- ✅ Code editor field rendering
+- ✅ Map field rendering
+- ✅ Sortable field rendering
+- ✅ Palette field rendering
+
+### Тесты состояния (localStorage)
+
+- ✅ Accordion state persistence
+- ✅ Tabbed state persistence
+
 ## Статистика
 
 | Категория | Количество |
 |-----------|-----------|
-| Feature тесты | 41 |
-| Unit тесты | 23 |
-| **ИТОГО** | **64** |
+| Основные тесты | 4 |
+| v2.2 тесты | 5 |
+| v2.3 тесты | 4 |
+| Тесты состояния | 2 |
+| **ИТОГО** | **15** |
 
 ## Покрытие
 
 Тесты покрывают:
 
-- ✅ Все 20+ типов полей
+- ✅ Все 38 типов полей
 - ✅ Система зависимостей (12 операторов)
 - ✅ Все типы хранилищ (5)
 - ✅ Композитные поля (group, repeater)
 - ✅ Поля выбора (select, radio, checkbox)
 - ✅ Валидация и инициализация
-- ✅ Алиасы параметров
+- ✅ Сохранение состояния (localStorage)
 - ✅ Атрибуты и классы
 
 ## Примеры запуска
