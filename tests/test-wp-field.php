@@ -3,8 +3,8 @@
  * Простые тесты для WP_Field
  */
 
-// Загружаем WordPress
-require_once dirname(__DIR__, 6) . '/wp-load.php';
+// Загружаем WordPress моки из bootstrap
+require_once __DIR__ . '/../../../tests/bootstrap.php';
 
 // Загружаем класс
 require_once __DIR__ . '/../WP_Field.php';

@@ -1,10 +1,9 @@
 {
   "name": "rwsite/wp-field",
-  "description": "WP_Field v2.1 — Universal HTML field generator for WordPress. 25+ field types, dependency system, all storage types (post, options, term, user, comment), built-in WP components (wp_editor, wp-color-picker, wp.media), no external dependencies. Production ready.",
-  "minimum-stability": "stable",
-  "license": "proprietary",
+  "description": "WP_Field v2.1 — Universal HTML field generator for WordPress",
   "type": "wordpress-plugin",
   "version": "2.1.0",
+  "license": "proprietary",
   "authors": [
     {
       "name": "Aleksei Tikhomirov",
@@ -12,25 +11,16 @@
     }
   ],
   "require": {
-  },
-  "require-dev": {
-    "pestphp/pest": "^2.0",
-    "phpunit/phpunit": "^10.0"
-  },
-  "autoload": {
-    "classmap": [
-      "WP_Field.php"
-    ]
+    "php": ">=8.0"
   },
   "scripts": {
-    "test": "pest",
-    "test:coverage": "pest --coverage",
-    "test:unit": "pest tests/Unit",
-    "test:feature": "pest tests/Feature"
+    "test": "cd ../../../../plugins/woo2iiko && ./vendor/bin/phpunit lib/wp-field/tests/Unit/FieldInitializationTest.php",
+    "test:all": "cd ../../../../plugins/woo2iiko && composer test",
+    "test:old": "php tests/test-wp-field-v2.4.php"
   },
-  "config": {
-    "allow-plugins": {
-      "pestphp/pest-plugin": true
-    }
+  "scripts-descriptions": {
+    "test": "Запуск PHPUnit тестов WP_Field",
+    "test:all": "Запуск всех тестов проекта",
+    "test:old": "Запуск старых тестов напрямую"
   }
 }

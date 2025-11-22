@@ -7,11 +7,8 @@
  * Запуск: php tests/test-wp-field-v2.4.php
  */
 
-// Загружаем WordPress
-$wp_load = dirname(__DIR__, 6) . '/wp-load.php';
-if (file_exists($wp_load)) {
-    require_once $wp_load;
-}
+// Загружаем WordPress моки из bootstrap
+require_once __DIR__ . '/../../../tests/bootstrap.php';
 
 // Загружаем WP_Field класс
 require_once __DIR__ . '/../WP_Field.php';
@@ -59,6 +56,9 @@ class WP_Field_Tests_v2_4 {
             if (!class_exists('WP_Field')) {
                 throw new Exception('WP_Field class not found');
             }
+            
+            // Инициализируем реестр типов
+            WP_Field::init_field_types();
             
             // Проверяем инициализацию типов
             $reflection = new ReflectionClass('WP_Field');
@@ -423,6 +423,7 @@ class WP_Field_Tests_v2_4 {
             $field = [
                 'id'    => 'test_accordion_state',
                 'type'  => 'accordion',
+                'label' => 'Test Accordion',
                 'items' => [
                     ['title' => 'Item 1', 'content' => 'Content 1'],
                     ['title' => 'Item 2', 'content' => 'Content 2'],
@@ -452,6 +453,7 @@ class WP_Field_Tests_v2_4 {
             $field = [
                 'id'   => 'test_tabbed_state',
                 'type' => 'tabbed',
+                'label' => 'Test Tabbed',
                 'tabs' => [
                     ['title' => 'Tab 1', 'content' => 'Content 1'],
                     ['title' => 'Tab 2', 'content' => 'Content 2'],
