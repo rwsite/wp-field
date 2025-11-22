@@ -1,0 +1,316 @@
+/**
+ * WP_Field - Universal field renderer for WordPress
+ * Базовые стили для полей и состояний
+ */
+
+/* Wrapper поля */
+.wp-field {
+    margin-bottom: 20px;
+    transition: opacity 0.3s ease;
+}
+
+.wp-field.is-hidden {
+    display: none;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Label */
+.wp-field label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: #333;
+}
+
+.wp-field label.input-label {
+    font-size: 14px;
+}
+
+/* Input базовые */
+.wp-field input[type="text"],
+.wp-field input[type="password"],
+.wp-field input[type="email"],
+.wp-field input[type="url"],
+.wp-field input[type="tel"],
+.wp-field input[type="number"],
+.wp-field input[type="date"],
+.wp-field input[type="time"],
+.wp-field input[type="datetime-local"],
+.wp-field input[type="range"],
+.wp-field textarea,
+.wp-field select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: inherit;
+    background-color: #fff;
+    color: #333;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.wp-field input[type="text"]:focus,
+.wp-field input[type="password"]:focus,
+.wp-field input[type="email"]:focus,
+.wp-field input[type="url"]:focus,
+.wp-field input[type="tel"]:focus,
+.wp-field input[type="number"]:focus,
+.wp-field input[type="date"]:focus,
+.wp-field input[type="time"]:focus,
+.wp-field input[type="datetime-local"]:focus,
+.wp-field input[type="range"]:focus,
+.wp-field textarea:focus,
+.wp-field select:focus {
+    outline: none;
+    border-color: #0073aa;
+    box-shadow: 0 0 0 2px rgba(0, 115, 170, 0.1);
+}
+
+/* Disabled/Readonly */
+.wp-field input:disabled,
+.wp-field textarea:disabled,
+.wp-field select:disabled {
+    background-color: #f5f5f5;
+    color: #999;
+    cursor: not-allowed;
+}
+
+.wp-field input[readonly],
+.wp-field textarea[readonly] {
+    background-color: #f9f9f9;
+    color: #666;
+}
+
+/* Textarea */
+.wp-field textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+/* Select */
+.wp-field select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 20px;
+    padding-right: 30px;
+}
+
+/* Checkbox и Radio */
+.wp-field input[type="checkbox"],
+.wp-field input[type="radio"] {
+    width: auto;
+    margin-right: 8px;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.wp-field-checkbox-group label,
+.wp-field-radio-group label {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    font-weight: normal;
+}
+
+.wp-field-checkbox-group label input,
+.wp-field-radio-group label input {
+    margin-right: 8px;
+}
+
+/* Description */
+.wp-field .description {
+    margin-top: 5px;
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+}
+
+/* Color picker */
+.wp-field .wp-color-picker-field {
+    max-width: 100px;
+    height: 40px;
+    cursor: pointer;
+}
+
+/* Group */
+.wp-field-group {
+    padding: 15px;
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.wp-field-group .wp-field {
+    margin-bottom: 15px;
+}
+
+.wp-field-group .wp-field:last-child {
+    margin-bottom: 0;
+}
+
+/* Repeater */
+.wp-field-repeater {
+    margin-top: 10px;
+}
+
+.wp-field-repeater-item {
+    padding: 15px;
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    position: relative;
+}
+
+.wp-field-repeater-item.wp-field-repeater-template {
+    display: none;
+}
+
+.wp-field-repeater-item .wp-field {
+    margin-bottom: 10px;
+}
+
+.wp-field-repeater-item .wp-field:last-child {
+    margin-bottom: 15px;
+}
+
+.wp-field-repeater-remove {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 5px 10px;
+    background-color: #dc3545;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.wp-field-repeater-remove:hover {
+    background-color: #c82333;
+}
+
+.wp-field-repeater-add {
+    margin-top: 10px;
+}
+
+/* Media/Image/File/Gallery buttons */
+.wp-field-image-button,
+.wp-field-file-button,
+.wp-field-gallery-button,
+.wp-field-media-button,
+.wp-field-image-remove {
+    padding: 8px 12px;
+    margin-right: 5px;
+    background-color: #0073aa;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.2s ease;
+}
+
+.wp-field-image-button:hover,
+.wp-field-file-button:hover,
+.wp-field-gallery-button:hover,
+.wp-field-media-button:hover {
+    background-color: #005a87;
+}
+
+.wp-field-image-remove {
+    background-color: #dc3545;
+}
+
+.wp-field-image-remove:hover {
+    background-color: #c82333;
+}
+
+.wp-field-image-remove:disabled,
+.wp-field-image-button:disabled,
+.wp-field-file-button:disabled,
+.wp-field-gallery-button:disabled,
+.wp-field-media-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Image preview */
+.wp-field-image-preview {
+    max-width: 200px;
+    height: auto;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    display: block;
+}
+
+/* Image picker */
+.wp-field-image-picker {
+    width: 100%;
+}
+
+/* Error state */
+.wp-field.has-error input,
+.wp-field.has-error textarea,
+.wp-field.has-error select {
+    border-color: #dc3545;
+    background-color: #fff5f5;
+}
+
+.wp-field.has-error .error-message {
+    color: #dc3545;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+/* Accessibility */
+.wp-field input:focus-visible,
+.wp-field textarea:focus-visible,
+.wp-field select:focus-visible {
+    outline: 2px solid #0073aa;
+    outline-offset: 2px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .wp-field {
+        margin-bottom: 15px;
+    }
+
+    .wp-field-repeater-item {
+        padding: 10px;
+    }
+
+    .wp-field-repeater-remove {
+        position: static;
+        display: block;
+        width: 100%;
+        margin-top: 10px;
+    }
+}
+
+/* Utility classes */
+.wp-field.regular-text {
+    width: 100%;
+}
+
+.wp-field input.regular-text {
+    width: 100%;
+}
+
+.wp-field.small-text input {
+    width: 100px;
+}
+
+.wp-field.large-text textarea {
+    width: 100%;
+    min-height: 150px;
+}

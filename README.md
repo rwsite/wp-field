@@ -1,175 +1,232 @@
-# wp-field
-Universal simple generator of HTML fields for developer. Library for WordPress. 
-You can use it for any parts in WordPress: post metaboxes, profile pages, options page and something.
+# WP_Field v2.0 — Universal HTML Field Generator for WordPress
 
-It will save you time, does not burden the WordPress and is very simple!!!
+Минималистичная, расширяемая библиотека для создания полей в WordPress с поддержкой:
+- 20+ типов полей (базовые, выборные, продвинутые, композитные)
+- Системы зависимостей между полями
+- Всех типов хранилищ (post meta, options, term meta, user meta, comment meta)
+- Встроенных WP компонентов (wp_editor, wp-color-picker, wp.media)
+- Без внешних зависимостей (JS/CSS)
 
-## How start
+## Быстрый старт
 
-1. Upload it as WordPress plugin or as dependency
-2. Create new field: 
+```php
+// Простое текстовое поле
+WP_Field::make([
+    'id'    => 'shop_name',
+    'type'  => 'text',
+    'label' => 'Название магазина',
+]);
 
- `new WP_Field(['id'=>'text_field','type'=>'text','label'=>'Label'], 'option', 'option_name');`
+// Select с зависимостью
+WP_Field::make([
+    'id'      => 'delivery_type',
+    'type'    => 'select',
+    'label'   => 'Тип доставки',
+    'options' => ['courier' => 'Курьер', 'pickup' => 'Самовывоз'],
+]);
 
-4. View result https://i.imgur.com/85ABxQR.png
-
-## How to use with params
-`new WP_Field( array params, string type, string db_name);`
-
-Where `params`: 
-<pre>
-[
-    'id'   => 'option_name' required,
-    'type' => 'select', 'text', 'textarea', 'checkbox' etc. text by default,
-    'label' => 'string',
-    'placeholder' => 'string',
-    'class' => 'string',
-    'custom_attributes' => [],
-    'val'   => 'default value (slug: value, default)'
-]
-</pre>
-
-**id, type, label(title) - Required params !!!**
-
-`type`: 'option', 'post', 'comment', 'term', 'user', or any other object type with an associated meta table.
-
-`db_name`: option name in DB for getting value
-
-## Examples:
-
-### Text field:
-https://i.imgur.com/85ABxQR.png
-
-<pre>
-new WP_Field([
-    'id'          => 'text',
-    'type'        => 'text',
-    'placeholder' => 'Type something..',
-    'label'       => __('Please type something..', 'wp'),
-    'class'       => '',
-    'custom_attributes' => ['data' => 'data'],
-    'default'     => 'Default value'
-], 'option', 'option_name');
-</pre>
-
-### Select:
-https://i.imgur.com/BCONXoM.png
-
-<pre>
-new WP_Field([
-    'id'          => 'option_name',
-    'type'        => 'select',
-    'placeholder' => 'Choose something..',
-    'label'       => __('Please choose something..', 'wp'),
-    'class'       => 'wp_field',
-    'custom_attributes' => ['data' => 'data'],
-    'multiple'    => true,
-    'options'     => ['value_1' => 'Option name 1', 'value_2' => 'Option name 2',],
-], 'option', 'option_name');
-</pre>
-
-### Checkbox:
-https://i.imgur.com/afquc1H.png
-
-<pre>
-new WP_Field([
-   'id'    => 'site_checkbox',
-   'type'  => 'checkbox',
-   'title' => 'Enable it?',
-], 'option', 'option_name');
-</pre>
-
-### Textarea:
-
-<pre>
-new WP_Field([
-   'id'    => 'site_description',
-   'type'  => 'textarea',
-   'title' => 'Description',
-], 'option', 'option_name');
-</pre>
-
-### Number (int):
-
-<pre>
-new WP_Field([
-   'id'    => 'site_number',
-   'type'  => 'number',
-   'title' => 'Enter number...',
-], 'option', 'option_name');
-</pre>
-
-### Radio:
-
-<pre>
-new WP_Field([
-    'id'    => 'site_radio',
-    'type'  => 'radio',
-    'placeholder' => 'Choose something..',
-    'label'       => __('Please choose something..', 'wp'),
-    'options' => ['value_1' => 'Option name 1', 'value_2' => 'Option name 2',]
-], 'option', 'option_name');
-</pre>
-
-### WP Editor:
-
-<pre>
-new WP_Field([
-   'id'    => 'site_editor',
-   'type'  => 'editor',
-   'title' => 'HTML WP Editor',
-], 'option', 'option_name');
-</pre>
-
-### Media file (wp lib):
-
-<pre>
-new WP_Field([
-    'id'    => 'site_media',
-    'type'  => 'media',
-    'title' => 'Select media file',
-], 'option', 'option_name');
-</pre>
-
-
-### Date and time:
-
-<pre>
-new WP_Field([
-    'id'    => 'site_datetime',
-    'type'  => 'datetime',
-    'title' => 'Time field',
-], 'option', 'option_name');
-</pre>
-
-### Image picker:
-
-<pre>
-new WP_Field([
-    'id'    => 'site_imagepicker',
-    'type'  => 'imagepicker',
-    'title' => 'Pick image',
-    'options' => [
-        '1' => 'http://placekitten.com/220/200',
-        '2' => 'http://placekitten.com/180/200',
+WP_Field::make([
+    'id'    => 'delivery_address',
+    'type'  => 'text',
+    'label' => 'Адрес доставки',
+    'dependency' => [
+        ['delivery_type', '==', 'courier'],
     ],
-], 'option', 'option_name');
-</pre>
+]);
+```
 
+## Использование
 
-## Example. Use post meta as field value
-Where 
-'meta_name' = post meta key, 
-'post' = for any post type
-<pre>
-new WP_Field([
-    'id'          => 'text',
-    'type'        => 'text',
-    'placeholder' => 'Type something..',
-    'label'       => __('Please type something..', 'wp'),
-    'class'       => '',
-    'custom_attributes' => ['data' => 'data'],
-    'default'     => 'Default value'
-], 'post', 'meta_name');
-</pre>
+### Базовый синтаксис
+
+```php
+WP_Field::make(array $field_config, bool $output = true, string $storage_type = 'post', int|string $storage_id = null);
+```
+
+### Параметры поля
+
+```php
+[
+    'id'                 => 'field_id',              // Обязательно
+    'type'               => 'text',                  // Обязательно
+    'label'              => 'Название',              // Обязательно
+    'name'               => 'custom_name',           // Переопределить name атрибут
+    'value'              => 'explicit_value',        // Явное значение
+    'default'            => 'default_value',         // Значение по умолчанию
+    'placeholder'        => 'Введите...',             // Placeholder
+    'class'              => 'regular-text',          // CSS класс
+    'desc'               => 'Описание поля',         // Описание
+    'readonly'           => false,                   // Только для чтения
+    'disabled'           => false,                   // Отключено
+    'custom_attributes'  => ['data-x' => 'y'],       // Кастомные атрибуты
+    'dependency'         => [                        // Условия видимости
+        ['field_id', '==', 'value'],
+        'relation' => 'AND',
+    ],
+]
+```
+
+### Типы хранилищ
+
+```php
+// Post meta (по умолчанию)
+WP_Field::make($field, true, 'post', $post_id);
+
+// Option
+WP_Field::make($field, true, 'options');
+
+// Term meta
+WP_Field::make($field, true, 'term', $term_id);
+
+// User meta
+WP_Field::make($field, true, 'user', $user_id);
+
+// Comment meta
+WP_Field::make($field, true, 'comment', $comment_id);
+```
+
+## Поддерживаемые типы полей
+
+### Базовые (Basic)
+- `text` — текстовое поле
+- `password` — пароль
+- `email` — email
+- `url` — URL
+- `tel` — телефон
+- `number` — число
+- `range` — диапазон
+- `hidden` — скрытое поле
+- `textarea` — многострочный текст
+
+### Выборные (Choice)
+- `select` — выпадающий список
+- `multiselect` — множественный выбор
+- `radio` — радиокнопки
+- `checkbox` — одиночный чекбокс
+- `checkbox_group` — группа чекбоксов
+
+### Продвинутые (Advanced)
+- `editor` — wp_editor
+- `media` — медиа (ID или URL)
+- `image` — изображение с preview
+- `file` — файл
+- `gallery` — галерея
+- `color` — color picker
+- `date` — дата
+- `time` — время
+- `datetime` — дата и время
+
+### Композитные (Composite)
+- `group` — вложенные поля
+- `repeater` — повторяющиеся элементы
+
+## Примеры
+
+### Зависимости (Dependency)
+
+```php
+// Показать поле только если другое поле имеет значение
+WP_Field::make([
+    'id'    => 'courier_address',
+    'type'  => 'text',
+    'label' => 'Адрес доставки',
+    'dependency' => [
+        ['delivery_type', '==', 'courier'],
+    ],
+]);
+
+// Множественные условия (AND)
+WP_Field::make([
+    'id'    => 'special_field',
+    'type'  => 'text',
+    'label' => 'Специальное поле',
+    'dependency' => [
+        ['field1', '==', 'value1'],
+        ['field2', '!=', 'value2'],
+        'relation' => 'AND',
+    ],
+]);
+
+// Множественные условия (OR)
+WP_Field::make([
+    'id'    => 'notification',
+    'type'  => 'text',
+    'label' => 'Уведомление',
+    'dependency' => [
+        ['type', '==', 'sms'],
+        ['type', '==', 'email'],
+        'relation' => 'OR',
+    ],
+]);
+```
+
+### Repeater
+
+```php
+WP_Field::make([
+    'id'       => 'work_times',
+    'type'     => 'repeater',
+    'label'    => 'Время работы',
+    'min'      => 1,
+    'max'      => 7,
+    'add_text' => 'Добавить день',
+    'fields'   => [
+        [
+            'id'      => 'day',
+            'type'    => 'select',
+            'label'   => 'День',
+            'options' => ['mon' => 'Пн', 'tue' => 'Вт'],
+        ],
+        [
+            'id'    => 'from',
+            'type'  => 'time',
+            'label' => 'С',
+        ],
+        [
+            'id'    => 'to',
+            'type'  => 'time',
+            'label' => 'По',
+        ],
+    ],
+]);
+```
+
+### Group
+
+```php
+WP_Field::make([
+    'id'    => 'address',
+    'type'  => 'group',
+    'label' => 'Адрес',
+    'fields' => [
+        ['id' => 'city', 'type' => 'text', 'label' => 'Город'],
+        ['id' => 'street', 'type' => 'text', 'label' => 'Улица'],
+        ['id' => 'number', 'type' => 'text', 'label' => 'Номер'],
+    ],
+]);
+```
+
+## Операторы зависимостей
+
+- `==` — равно
+- `!=` — не равно
+- `>`, `>=`, `<`, `<=` — сравнение
+- `in` — в массиве
+- `not_in` — не в массиве
+- `contains` — содержит
+- `not_contains` — не содержит
+- `empty` — пусто
+- `not_empty` — не пусто
+
+## Документация
+
+- **QUICKSTART.md** — быстрый старт с примерами
+- **WP_FIELD_PLAN.md** — архитектура и план развития
+- **docs/** — дополнительная документация
+
+## Совместимость
+
+- WordPress 4.6+
+- PHP 7.4+
+- Без внешних зависимостей (использует встроенные WP скрипты)
 
