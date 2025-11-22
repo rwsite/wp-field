@@ -53,3 +53,105 @@ function createWPField(array $config = [], string $storage_type = 'options'): \W
 {
     return new \WP_Field(createField($config), $storage_type);
 }
+
+/*
+|--------------------------------------------------------------------------
+| WordPress Mock Functions for Testing
+|--------------------------------------------------------------------------
+*/
+
+if (!function_exists('plugin_dir_url')) {
+    function plugin_dir_url($file) {
+        return 'http://example.com/wp-content/plugins/woo2iiko/lib/wp-field/';
+    }
+}
+
+if (!function_exists('wp_kses_post')) {
+    function wp_kses_post($data) {
+        return $data;
+    }
+}
+
+if (!function_exists('esc_attr')) {
+    function esc_attr($text) {
+        return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+if (!function_exists('esc_html')) {
+    function esc_html($text) {
+        return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+if (!function_exists('esc_textarea')) {
+    function esc_textarea($text) {
+        return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+if (!function_exists('esc_url')) {
+    function esc_url($url) {
+        return htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+if (!function_exists('tag_escape')) {
+    function tag_escape($tag) {
+        return htmlspecialchars($tag, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+if (!function_exists('absint')) {
+    function absint($maybeint) {
+        return abs((int) $maybeint);
+    }
+}
+
+if (!function_exists('get_option')) {
+    function get_option($option, $default = false) {
+        return $default;
+    }
+}
+
+if (!function_exists('get_post_meta')) {
+    function get_post_meta($post_id, $key, $single = false) {
+        return null;
+    }
+}
+
+if (!function_exists('get_term_meta')) {
+    function get_term_meta($term_id, $key, $single = false) {
+        return null;
+    }
+}
+
+if (!function_exists('get_user_meta')) {
+    function get_user_meta($user_id, $key, $single = false) {
+        return null;
+    }
+}
+
+if (!function_exists('get_comment_meta')) {
+    function get_comment_meta($comment_id, $key, $single = false) {
+        return null;
+    }
+}
+
+if (!function_exists('is_admin')) {
+    function is_admin() {
+        return false;
+    }
+}
+
+if (!function_exists('wp_enqueue_script')) {
+    function wp_enqueue_script($handle, $src = '', $deps = [], $ver = false, $in_footer = false) {
+        return true;
+    }
+}
+
+if (!function_exists('wp_enqueue_style')) {
+    function wp_enqueue_style($handle, $src = '', $deps = [], $ver = false, $media = 'all') {
+        return true;
+    }
+}

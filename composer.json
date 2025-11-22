@@ -1,10 +1,10 @@
 {
   "name": "rwsite/wp-field",
-  "description": "WP_Field v2.0 — Universal HTML field generator for WordPress. 20+ field types, dependency system, all storage types (post, options, term, user, comment), built-in WP components (wp_editor, wp-color-picker, wp.media), no external dependencies. Production ready.",
+  "description": "WP_Field v2.1 — Universal HTML field generator for WordPress. 25+ field types, dependency system, all storage types (post, options, term, user, comment), built-in WP components (wp_editor, wp-color-picker, wp.media), no external dependencies. Production ready.",
   "minimum-stability": "stable",
   "license": "proprietary",
   "type": "wordpress-plugin",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "authors": [
     {
       "name": "Aleksei Tikhomirov",
@@ -27,5 +27,10 @@
     "test:coverage": "pest --coverage",
     "test:unit": "pest tests/Unit",
     "test:feature": "pest tests/Feature"
+  },
+  "config": {
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
+    }
   }
 }
