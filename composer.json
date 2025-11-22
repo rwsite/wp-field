@@ -1,9 +1,10 @@
 {
   "name": "rwsite/wp-field",
-  "description": "WP library plugin. Universal HTML field generator for WordPress. See usage examples in readme.md",
+  "description": "WP_Field v2.0 — Universal HTML field generator for WordPress. 20+ field types, dependency system, all storage types (post, options, term, user, comment), built-in WP components (wp_editor, wp-color-picker, wp.media), no external dependencies. Production ready.",
   "minimum-stability": "stable",
   "license": "proprietary",
   "type": "wordpress-plugin",
+  "version": "2.0.0",
   "authors": [
     {
       "name": "Aleksei Tikhomirov",
@@ -11,5 +12,20 @@
     }
   ],
   "require": {
+  },
+  "require-dev": {
+    "pestphp/pest": "^2.0",
+    "phpunit/phpunit": "^10.0"
+  },
+  "autoload": {
+    "classmap": [
+      "WP_Field.php"
+    ]
+  },
+  "scripts": {
+    "test": "pest",
+    "test:coverage": "pest --coverage",
+    "test:unit": "pest tests/Unit",
+    "test:feature": "pest tests/Feature"
   }
 }
