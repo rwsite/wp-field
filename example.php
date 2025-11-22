@@ -479,20 +479,11 @@ class WP_Field_Examples {
     
     /**
      * Получить расширенные данные для типа поля
+     * Примечание: все данные теперь встроены в example.php
      */
     private function get_field_data($type) {
-        static $field_data = null;
-        
-        if ($field_data === null) {
-            $file = __DIR__ . '/field-data.php';
-            if (file_exists($file)) {
-                $field_data = include $file;
-            } else {
-                $field_data = [];
-            }
-        }
-        
-        return $field_data[$type] ?? ['arguments' => [], 'advanced_examples' => []];
+        // field-data.php удалён, все примеры встроены в example.php
+        return ['arguments' => [], 'advanced_examples' => []];
     }
     
     /**
@@ -1016,25 +1007,39 @@ class WP_Field_Examples {
                         'id' => 'accordion_field',
                         'type' => 'accordion',
                         'label' => 'Accordion — Аккордеон',
-                        'sections' => [
+                        'items' => [
                             [
-                                'title' => 'Секция 1',
-                                'open' => true,
-                                'content' => '<p>Содержимое первой секции</p>',
-                                'fields' => [
-                                    ['id' => 'acc_text1', 'type' => 'text', 'label' => 'Текст 1'],
-                                ],
+                                'title' => 'Как оформить заказ?',
+                                'content' => '<p>Выберите товары, добавьте их в корзину и перейдите к оформлению заказа.</p>',
                             ],
                             [
-                                'title' => 'Секция 2',
-                                'content' => '<p>Содержимое второй секции</p>',
-                                'fields' => [
-                                    ['id' => 'acc_text2', 'type' => 'text', 'label' => 'Текст 2'],
-                                ],
+                                'title' => 'Какие способы доставки?',
+                                'content' => '<p>Мы предлагаем доставку курьером, почтой и самовывоз.</p>',
+                            ],
+                            [
+                                'title' => 'Как вернуть товар?',
+                                'content' => '<p>Товар можно вернуть в течение 14 дней с момента покупки.</p>',
                             ],
                         ],
-                        'desc' => 'Свёртываемые секции с контентом',
-                        'example_code' => "WP_Field::make([\n    'type' => 'accordion',\n    'sections' => [...]\n]);",
+                        'desc' => 'Свёртываемые секции с контентом - нажмите для открытия/закрытия',
+                        'example_code' => "WP_Field::make([\n    'type' => 'accordion',\n    'label' => 'FAQ',\n    'items' => [\n        ['title' => 'Вопрос 1', 'content' => 'Ответ 1'],\n        ['title' => 'Вопрос 2', 'content' => 'Ответ 2']\n    ]\n]);",
+                        'advanced_examples' => [
+                            [
+                                'title' => 'Аккордеон с полями',
+                                'desc' => 'Аккордеон с редактируемыми полями внутри разделов',
+                                'code' => "WP_Field::make([\n    'id' => 'settings_accordion',\n    'type' => 'accordion',\n    'label' => 'Настройки',\n    'items' => [\n        [\n            'title' => 'Основные',\n            'open' => true,\n            'fields' => [\n                ['id' => 'site_name', 'type' => 'text', 'label' => 'Название сайта'],\n                ['id' => 'site_desc', 'type' => 'textarea', 'label' => 'Описание']\n            ]\n        ],\n        [\n            'title' => 'Дизайн',\n            'fields' => [\n                ['id' => 'primary_color', 'type' => 'color', 'label' => 'Основной цвет'],\n                ['id' => 'secondary_color', 'type' => 'color', 'label' => 'Дополнительный цвет']\n            ]\n        ]\n    ]\n]);"
+                            ],
+                            [
+                                'title' => 'С дефолтным открытым разделом',
+                                'desc' => 'Указание, какой раздел открыт по умолчанию',
+                                'code' => "WP_Field::make([\n    'id' => 'default_accordion',\n    'type' => 'accordion',\n    'label' => 'Аккордеон с дефолтом',\n    'items' => [\n        ['title' => 'Раздел 1', 'content' => 'Содержимое...'],\n        ['title' => 'Раздел 2', 'content' => 'Содержимое...', 'open' => true],\n        ['title' => 'Раздел 3', 'content' => 'Содержимое...']\n    ]\n]);"
+                            ],
+                            [
+                                'title' => 'Кастомные иконки',
+                                'desc' => 'Использование собственных иконок для аккордеона',
+                                'code' => "WP_Field::make([\n    'id' => 'custom_accordion',\n    'type' => 'accordion',\n    'label' => 'Кастомный аккордеон',\n    'open_icon' => '−',\n    'close_icon' => '+',\n    'items' => [\n        ['title' => 'Раздел 1', 'content' => 'Содержимое...'],\n        ['title' => 'Раздел 2', 'content' => 'Содержимое...']\n    ]\n]);"
+                            ]
+                        ]
                     ],
                     [
                         'id' => 'tabbed_field',
@@ -1164,6 +1169,23 @@ class WP_Field_Examples {
                         'desc' => 'Выбор иконки из библиотеки Dashicons',
                         'example_desc' => 'Modal с поиском по 50+ иконкам',
                         'example_code' => "WP_Field::make([\n    'type' => 'icon',\n    'library' => 'dashicons'\n]);",
+                        'advanced_examples' => [
+                            [
+                                'title' => 'Кастомный набор иконок',
+                                'desc' => 'Использование собственного набора иконок (например, Font Awesome)',
+                                'code' => "WP_Field::make([\n    'id' => 'custom_icon',\n    'type' => 'icon',\n    'label' => 'Выберите иконку',\n    'library' => 'fa',\n    'icons' => [\n        'fa-home',\n        'fa-user',\n        'fa-cog',\n        'fa-heart',\n        'fa-star',\n        'fa-check',\n        'fa-times',\n        'fa-search'\n    ]\n]);"
+                            ],
+                            [
+                                'title' => 'Регистрация библиотеки через фильтр',
+                                'desc' => 'Добавление собственной библиотеки иконок через wp_field_icon_library фильтр',
+                                'code' => "// В functions.php:\nadd_filter('wp_field_icon_library', function(\$icons, \$library) {\n    if (\$library === 'custom') {\n        return [\n            'custom-icon-1',\n            'custom-icon-2',\n            'custom-icon-3',\n            'custom-icon-home',\n            'custom-icon-user',\n            'custom-icon-settings'\n        ];\n    }\n    return \$icons;\n}, 10, 2);\n\n// Использование:\nWP_Field::make([\n    'id' => 'my_icon',\n    'type' => 'icon',\n    'label' => 'Выберите иконку',\n    'library' => 'custom'\n]);"
+                            ],
+                            [
+                                'title' => 'Получение выбранной иконки',
+                                'desc' => 'Использование выбранной иконки на фронтенде',
+                                'code' => "\$icon = get_option('icon_field');\nif (\$icon) {\n    echo '<i class=\"dashicons ' . esc_attr(\$icon) . '\"></i>';\n    echo ' ' . esc_html(\$icon);\n}"
+                            ]
+                        ]
                     ],
                     [
                         'id' => 'sortable_field',

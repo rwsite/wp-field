@@ -667,7 +667,7 @@
 .wp-field-slider {
     flex: 1;
     min-width: 200px;
-    height: 8px;
+    height: 0px;
     border-radius: 4px;
     background: linear-gradient(to right, #e0e0e0 0%, #e0e0e0 100%);
     outline: none;
@@ -909,34 +909,54 @@
     border: 1px solid #ddd;
     border-radius: 4px;
     overflow: hidden;
+    background: white;
 }
 
 .wp-field-accordion-item {
     border-bottom: 1px solid #ddd;
+    transition: background-color 0.2s ease;
 }
 
 .wp-field-accordion-item:last-child {
     border-bottom: none;
 }
 
+.wp-field-accordion-item:hover {
+    background-color: #fafafa;
+}
+
 .wp-field-accordion-header {
     display: flex;
     align-items: center;
-    padding: 12px 15px;
+    padding: 14px 16px;
     background: #f9f9f9;
     cursor: pointer;
     user-select: none;
-    transition: background 0.2s;
+    transition: all 0.2s ease;
+    font-size: 15px;
 }
 
 .wp-field-accordion-header:hover {
     background: #f0f0f0;
 }
 
+.wp-field-accordion-item.is-open .wp-field-accordion-header {
+    background: #f5f5f5;
+    border-bottom: 2px solid #0073aa;
+}
+
 .wp-field-accordion-icon {
-    margin-right: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 12px;
     font-size: 12px;
-    transition: transform 0.3s;
+    font-weight: bold;
+    color: #0073aa;
+    transition: transform 0.3s ease;
+    flex-shrink: 0;
 }
 
 .wp-field-accordion-item.is-open .wp-field-accordion-icon {
@@ -946,18 +966,20 @@
 .wp-field-accordion-title {
     font-weight: 600;
     color: #333;
+    flex: 1;
 }
 
 .wp-field-accordion-content {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.3s ease;
-    padding: 0 15px;
+    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease;
+    padding: 0 16px;
+    background: white;
 }
 
 .wp-field-accordion-item.is-open .wp-field-accordion-content {
-    max-height: 2000px;
-    padding: 15px;
+    max-height: 5000px;
+    padding: 16px;
 }
 
 /* ===== Tabbed (v2.2) ===== */

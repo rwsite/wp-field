@@ -297,21 +297,24 @@
                 });
                 
                 // Обновляем слайдер при изменении цвета через палитру
-                $field.wpColorPicker('instance').picker.on('irischange', function(event, ui) {
-                    if (ui && ui.color) {
-                        const currentColor = ui.color.toString();
-                        self.updateAlphaSliderBackground($alphaSliderInner, currentColor);
-                        
-                        // Обновляем позицию слайдера если цвет содержит альфа
-                        if (currentColor.indexOf('rgba') !== -1) {
-                            const rgba = currentColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+),?\s*(\d*\.?\d+)?\)/);
-                            if (rgba && rgba[4]) {
-                                const newAlpha = parseFloat(rgba[4]);
-                                $alphaSliderInner.slider('value', newAlpha * 100);
+                const instance = $field.wpColorPicker('instance');
+                if (instance && instance.picker) {
+                    instance.picker.on('irischange', function(event, ui) {
+                        if (ui && ui.color) {
+                            const currentColor = ui.color.toString();
+                            self.updateAlphaSliderBackground($alphaSliderInner, currentColor);
+                            
+                            // Обновляем позицию слайдера если цвет содержит альфа
+                            if (currentColor.indexOf('rgba') !== -1) {
+                                const rgba = currentColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+),?\s*(\d*\.?\d+)?\)/);
+                                if (rgba && rgba[4]) {
+                                    const newAlpha = parseFloat(rgba[4]);
+                                    $alphaSliderInner.slider('value', newAlpha * 100);
+                                }
                             }
                         }
-                    }
-                });
+                    });
+                }
             }, 100);
         },
 
@@ -653,8 +656,8 @@
          * Добавить элемент в repeater
          */
         addRepeaterItem: function (fieldId) {
-            const $repeater = $('[data-field-id="' + fieldId + '"].wp-field-repeater');
-            const $template = $repeater.find('.wp-field-repeater-template');
+            const $repeater = $('[data-field-id="' + fieldId + '"].wp-field-repeater > .wp-field-repeater');
+            const $template = $repeater.find('.wp-field-repeater-template').first();
 
             if ($template.length === 0) {
                 console.warn('Template не найден для repeater: ' + fieldId);
@@ -662,28 +665,47 @@
             }
 
             // Получаем максимальный индекс
-            const maxIndex = Math.max(
-                0,
-                ...Array.from($repeater.find('.wp-field-repeater-item:not(.wp-field-repeater-template)'))
-                    .map(el => parseInt($(el).data('index')) || 0)
-            );
+            const $existingItems = $repeater.find('.wp-field-repeater-item:not(.wp-field-repeater-template)');
+            const indices = $existingItems.map(function() {
+                return parseInt($(this).data('index')) || 0;
+            }).get();
 
+            const maxIndex = indices.length > 0 ? Math.max(...indices) : -1;
             const newIndex = maxIndex + 1;
             const $newItem = $template.clone().removeClass('wp-field-repeater-template').attr('data-index', newIndex);
 
             // Обновляем ID и name в клонированных полях
-            $newItem.find('[data-field-id]').each(function () {
-                const $el = $(this);
-                const fieldId = $el.data('field-id');
-                $el.attr('data-field-id', fieldId + '_' + newIndex);
-
-                $el.find('input, select, textarea').each(function () {
-                    const $input = $(this);
-                    const name = $input.attr('name');
-                    if (name) {
-                        $input.attr('name', name.replace(/\[\d+\]/, '[' + newIndex + ']'));
-                    }
-                });
+            $newItem.find('input, select, textarea').each(function () {
+                const $input = $(this);
+                
+                // Обновляем name: заменяем [0] на [newIndex] в первом вхождении
+                const name = $input.attr('name');
+                if (name) {
+                    // Заменяем первое вхождение [0] на [newIndex]
+                    const newName = name.replace(/\[(\d+)\]/, '[' + newIndex + ']');
+                    $input.attr('name', newName);
+                }
+                
+                // Обновляем id: добавляем суффикс с индексом
+                const id = $input.attr('id');
+                if (id) {
+                    // Удаляем старый суффикс _0 и добавляем новый
+                    const newId = id.replace(/_\d+$/, '') + '_' + newIndex;
+                    $input.attr('id', newId);
+                }
+                
+                // Очищаем значение
+                $input.val('');
+            });
+            
+            // Обновляем label for атрибуты
+            $newItem.find('label[for]').each(function() {
+                const $label = $(this);
+                const forAttr = $label.attr('for');
+                if (forAttr) {
+                    const newFor = forAttr.replace(/_\d+$/, '') + '_' + newIndex;
+                    $label.attr('for', newFor);
+                }
             });
 
             $repeater.append($newItem);
@@ -696,10 +718,10 @@
          * Проверить лимит repeater
          */
         checkRepeaterLimit: function (fieldId) {
-            const $repeater = $('[data-field-id="' + fieldId + '"].wp-field-repeater');
+            const $repeater = $('[data-field-id="' + fieldId + '"].wp-field-repeater > .wp-field-repeater');
             const max = parseInt($repeater.data('max')) || 0;
             const count = $repeater.find('.wp-field-repeater-item:not(.wp-field-repeater-template)').length;
-            const $addButton = $('[data-field-id="' + fieldId + '"].wp-field-repeater-add');
+            const $addButton = $('[data-field-id="' + fieldId + '"] .wp-field-repeater-add');
 
             if (max > 0 && count >= max) {
                 $addButton.prop('disabled', true);
@@ -782,18 +804,98 @@
          * Инициализация accordion (свёртываемые секции)
          */
         initAccordion: function () {
+            const self = this;
+            
+            // Восстанавливаем сохранённое состояние аккордеонов
+            $('.wp-field-accordion').each(function() {
+                const $accordion = $(this);
+                const fieldId = $accordion.data('field-id') || 'accordion_' + Math.random().toString(36).substr(2, 9);
+                const savedState = localStorage.getItem('wp-field-accordion-' + fieldId);
+                
+                // Проверяем, есть ли явно открытые элементы (open флаг)
+                const hasExplicitOpen = $accordion.find('.wp-field-accordion-item.is-open').length > 0;
+                
+                // Если нет явно открытых элементов и есть сохранённое состояние, восстанавливаем его
+                if (!hasExplicitOpen && savedState) {
+                    try {
+                        const openItems = JSON.parse(savedState);
+                        $accordion.find('.wp-field-accordion-item').each(function(index) {
+                            const $item = $(this);
+                            const $content = $item.find('.wp-field-accordion-content');
+                            const $icon = $item.find('.wp-field-accordion-icon');
+                            
+                            if (openItems.includes(index)) {
+                                $item.addClass('is-open');
+                                $icon.text('▼');
+                                $content.css('max-height', 'none');
+                            } else {
+                                $item.removeClass('is-open');
+                                $icon.text('▶');
+                                $content.css('max-height', '0');
+                            }
+                        });
+                    } catch(e) {
+                        console.error('Error restoring accordion state:', e);
+                    }
+                } else if (hasExplicitOpen) {
+                    // Если есть явно открытые элементы, устанавливаем их max-height правильно
+                    $accordion.find('.wp-field-accordion-item').each(function() {
+                        const $item = $(this);
+                        const $content = $item.find('.wp-field-accordion-content');
+                        
+                        if ($item.hasClass('is-open')) {
+                            $content.css('max-height', 'none');
+                        } else {
+                            $content.css('max-height', '0');
+                        }
+                    });
+                }
+            });
+            
             $(document).on('click', '.wp-field-accordion-header', function () {
-                const $item = $(this).closest('.wp-field-accordion-item');
+                const $header = $(this);
+                const $item = $header.closest('.wp-field-accordion-item');
                 const $content = $item.find('.wp-field-accordion-content');
                 const $icon = $item.find('.wp-field-accordion-icon');
+                const $accordion = $item.closest('.wp-field-accordion');
+                const fieldId = $accordion.data('field-id') || 'accordion_' + Math.random().toString(36).substr(2, 9);
 
-                if ($item.hasClass('is-open')) {
+                // Получаем текущее состояние
+                const isOpen = $item.hasClass('is-open');
+                
+                // Вычисляем высоту контента
+                const contentHeight = $content[0].scrollHeight;
+                
+                if (isOpen) {
+                    // Закрываем
+                    $content.css('max-height', contentHeight + 'px');
+                    // Триггер reflow для активации transition
+                    $content[0].offsetHeight;
+                    $content.css('max-height', '0');
                     $item.removeClass('is-open');
                     $icon.text('▶');
                 } else {
+                    // Открываем
+                    $content.css('max-height', contentHeight + 'px');
                     $item.addClass('is-open');
                     $icon.text('▼');
+                    
+                    // После завершения анимации убираем max-height для гибкости контента
+                    setTimeout(() => {
+                        if ($item.hasClass('is-open')) {
+                            $content.css('max-height', 'none');
+                        }
+                    }, 300);
                 }
+                
+                // Сохраняем состояние всех открытых элементов
+                const openItems = [];
+                $accordion.find('.wp-field-accordion-item').each(function(index) {
+                    if ($(this).hasClass('is-open')) {
+                        openItems.push(index);
+                    }
+                });
+                localStorage.setItem('wp-field-accordion-' + fieldId, JSON.stringify(openItems));
             });
         },
 
@@ -801,10 +903,43 @@
          * Инициализация tabbed (вкладки)
          */
         initTabbed: function () {
+            const self = this;
+            
+            // Восстанавливаем сохранённое состояние вкладок
+            $('.wp-field-tabbed').each(function() {
+                const $tabbed = $(this);
+                const fieldId = $tabbed.data('field-id') || 'tabbed_' + Math.random().toString(36).substr(2, 9);
+                const defaultTabIndex = parseInt($tabbed.data('default-tab')) || 0;
+                const savedTab = localStorage.getItem('wp-field-tabbed-' + fieldId);
+                
+                // Если есть сохранённая вкладка, используем её, иначе используем дефолтную
+                let tabToActivate = null;
+                if (savedTab) {
+                    tabToActivate = savedTab;
+                } else {
+                    // Используем дефолтную вкладку
+                    const $defaultButton = $tabbed.find('.wp-field-tabbed-nav-item').eq(defaultTabIndex);
+                    if ($defaultButton.length) {
+                        tabToActivate = $defaultButton.data('tab');
+                    }
+                }
+                
+                if (tabToActivate) {
+                    const $button = $tabbed.find('[data-tab="' + tabToActivate + '"]').filter('.wp-field-tabbed-nav-item');
+                    if ($button.length) {
+                        $tabbed.find('.wp-field-tabbed-nav-item').removeClass('active');
+                        $tabbed.find('.wp-field-tabbed-pane').removeClass('active');
+                        $button.addClass('active');
+                        $tabbed.find('[data-tab="' + tabToActivate + '"]').filter('.wp-field-tabbed-pane').addClass('active');
+                    }
+                }
+            });
+            
             $(document).on('click', '.wp-field-tabbed-nav-item', function () {
                 const $button = $(this);
                 const tabId = $button.data('tab');
                 const $tabbed = $button.closest('.wp-field-tabbed');
+                const fieldId = $tabbed.data('field-id') || 'tabbed_' + Math.random().toString(36).substr(2, 9);
 
                 // Убираем active со всех кнопок и панелей
                 $tabbed.find('.wp-field-tabbed-nav-item').removeClass('active');
@@ -813,6 +948,9 @@
                 // Добавляем active к текущей кнопке и панели
                 $button.addClass('active');
                 $tabbed.find('[data-tab="' + tabId + '"]').filter('.wp-field-tabbed-pane').addClass('active');
+                
+                // Сохраняем выбранную вкладку в localStorage
+                localStorage.setItem('wp-field-tabbed-' + fieldId, tabId);
             });
         },
 

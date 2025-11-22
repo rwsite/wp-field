@@ -3,7 +3,7 @@
  * Plugin Name: Universal html field generator for WP
  * Plugin URI:  https://rwsite.ru
  * Description: WP library plugin. Universal HTML field generator for WordPress. See usage examples in readme.md
- * Version:     2.1.0
+ * Version:     2.4.11
  * Author:      Aleksei Tikhomirov
  * Author URI:  https://rwsite.ru
  * Text Domain: wp-field
@@ -1004,20 +1004,21 @@ class WP_Field
     {
         $this->render_label($field);
 
-        $values = (array)$this->get_field_value($field);
+        $values = (array) $this->get_field_value($field);
         $min = absint($field['min'] ?? 0);
         $max = absint($field['max'] ?? 0);
 
         echo '<div class="wp-field-repeater" data-field-id="' . esc_attr($field['id']) . '" data-min="' . $min . '" data-max="' . $max . '">';
 
-        foreach ($values as $index => $item) {
-            $this->render_repeater_item($field, $index, $item);
+        // Рендерим существующие элементы
+        if (!empty($values)) {
+            foreach ($values as $index => $item) {
+                $this->render_repeater_item($field, $index, $item);
+            }
         }
 
-        // Добавляем пустой шаблон для добавления новых элементов
-        if (empty($values) || ($max === 0 || count($values) < $max)) {
-            $this->render_repeater_item($field, 0, [], true);
-        }
+        // Всегда добавляем один шаблон для клонирования (скрыт через CSS)
+        $this->render_repeater_item($field, 0, [], true);
 
         echo '</div>';
 
@@ -1045,7 +1046,9 @@ class WP_Field
 
         if (!empty($field['fields'])) {
             foreach ($field['fields'] as $sub_field) {
-                $sub_field['name'] = $field['name'] ?? $field['id'];
+                // Формируем правильный name: parent_name[index][subfield_id]
+                $parent_name = $field['name'] ?? $field['id'];
+                $sub_field['name'] = sprintf('%s[%d][%s]', $parent_name, $index, $sub_field['id']);
                 $sub_field['value'] = is_array($item) && isset($item[$sub_field['id']]) ? $item[$sub_field['id']] : null;
 
                 $obj = new self($sub_field, $this->storage_type, $this->storage_id);
@@ -1354,22 +1357,25 @@ class WP_Field
     {
         $this->render_label($field);
 
-        if (empty($field['sections']) || !is_array($field['sections'])) {
-            echo '<p class="description">No sections provided</p>';
+        // Поддерживаем оба варианта: items и sections
+        $items = $field['items'] ?? $field['sections'] ?? [];
+        
+        if (empty($items) || !is_array($items)) {
+            echo '<p class="description">No items provided</p>';
             return;
         }
 
         echo '<div class="wp-field-accordion" data-field-id="' . esc_attr($field['id']) . '">';
 
-        foreach ($field['sections'] as $index => $section) {
-            $title = $section['title'] ?? 'Section ' . ($index + 1);
-            $content = $section['content'] ?? '';
-            $fields = $section['fields'] ?? [];
-            $open = !empty($section['open']);
+        foreach ($items as $index => $item) {
+            $title = $item['title'] ?? 'Item ' . ($index + 1);
+            $content = $item['content'] ?? '';
+            $fields = $item['fields'] ?? [];
+            $open = !empty($item['open']);
 
             printf(
-                '<div class="wp-field-accordion-item %s">
-                    <div class="wp-field-accordion-header" data-index="%d">
+                '<div class="wp-field-accordion-item %s" data-index="%d">
+                    <div class="wp-field-accordion-header">
                         <span class="wp-field-accordion-icon">%s</span>
                         <span class="wp-field-accordion-title">%s</span>
                     </div>
@@ -1411,14 +1417,23 @@ class WP_Field
         }
 
         $field_id = esc_attr($field['id']);
+        
+        // Определяем, какая вкладка должна быть активной по умолчанию
+        $default_active_index = 0;
+        foreach ($field['tabs'] as $index => $tab) {
+            if (!empty($tab['active'])) {
+                $default_active_index = $index;
+                break;
+            }
+        }
 
-        echo '<div class="wp-field-tabbed" data-field-id="' . $field_id . '">';
+        echo '<div class="wp-field-tabbed" data-field-id="' . $field_id . '" data-default-tab="' . $default_active_index . '">';
         echo '<div class="wp-field-tabbed-nav">';
 
         foreach ($field['tabs'] as $index => $tab) {
             $title = $tab['title'] ?? 'Tab ' . ($index + 1);
             $icon = $tab['icon'] ?? '';
-            $active = $index === 0 ? 'active' : '';
+            $active = $index === $default_active_index ? 'active' : '';
 
             printf(
                 '<button type="button" class="wp-field-tabbed-nav-item %s" data-tab="%s-%d">
@@ -1437,7 +1452,7 @@ class WP_Field
         foreach ($field['tabs'] as $index => $tab) {
             $content = $tab['content'] ?? '';
             $fields = $tab['fields'] ?? [];
-            $active = $index === 0 ? 'active' : '';
+            $active = $index === $default_active_index ? 'active' : '';
 
             printf(
                 '<div class="wp-field-tabbed-pane %s" data-tab="%s-%d">',
@@ -2126,7 +2141,8 @@ class WP_Field
         echo '</div>';
         echo '<div class="wp-field-icon-grid">';
 
-        $icons = $this->get_icon_library($library);
+        $custom_icons = $field['icons'] ?? null;
+        $icons = $this->get_icon_library($library, $custom_icons);
         foreach ($icons as $icon) {
             printf(
                 '<span class="%s %s" data-icon="%s" title="%s"></span>',
@@ -2145,8 +2161,13 @@ class WP_Field
     /**
      * Получить список иконок библиотеки
      */
-    private function get_icon_library(string $library): array
+    private function get_icon_library(string $library, ?array $custom_icons = null): array
     {
+        // Если переданы кастомные иконки, используем их
+        if (!empty($custom_icons)) {
+            return $custom_icons;
+        }
+
         if ($library === 'dashicons') {
             return [
                 'dashicons-admin-site', 'dashicons-dashboard', 'dashicons-admin-post', 'dashicons-admin-media',
