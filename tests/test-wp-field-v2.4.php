@@ -3,7 +3,18 @@
  * Тесты для WP_Field v2.4.11
  * 
  * Проверяет функциональность всех типов полей и основных компонентов
+ * 
+ * Запуск: php tests/test-wp-field-v2.4.php
  */
+
+// Загружаем WordPress
+$wp_load = dirname(__DIR__, 6) . '/wp-load.php';
+if (file_exists($wp_load)) {
+    require_once $wp_load;
+}
+
+// Загружаем WP_Field класс
+require_once __DIR__ . '/../WP_Field.php';
 
 class WP_Field_Tests_v2_4 {
     private $passed = 0;
