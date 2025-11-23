@@ -1,4 +1,4 @@
-# WP_Field v2.3 — Universal HTML Field Generator for WordPress
+# WP_Field v2.5.0 — Universal HTML Field Generator for WordPress
 
 Минималистичная, расширяемая библиотека для создания полей в WordPress с поддержкой:
 - **38 типов полей** (базовые, выборные, продвинутые, композитные, специализированные)
@@ -460,7 +460,7 @@ add_filter('wp_field_get_value', function($value, $storage_type, $key, $id, $fie
 
 ## История версий
 
-### v2.3.0 (2024-11-22)
+### v2.4.11 (2024-11-22)
 ✅ Добавлено 8 типов высокой сложности:
 - `code_editor`, `icon`, `map`, `sortable`, `sorter`, `palette`, `link`, `backup`
 

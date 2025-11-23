@@ -1,4 +1,4 @@
-# WP_Field v2.4.11 - Production Ready ✅
+# WP_Field v2.5.0 - Production Ready ✅
 
 ## Статус: ГОТОВО К ПРОДАКШЕНУ
 
