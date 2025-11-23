@@ -4,6 +4,18 @@
 
 ## [2.5.0] - 2025-11-23
 
+### Добавлено
+- **Полная реализация 52 типов полей**
+  - Базовые: 9 типов (text, password, email, url, tel, number, range, hidden, textarea)
+  - Выборные: 5 типов (select, multiselect, radio, checkbox, checkbox_group)
+  - Продвинутые: 9 типов (editor, media, image, file, gallery, color, date, time, datetime)
+  - Композитные: 2 типа (group, repeater)
+  - Простые v2.1: 9 типов (switcher, spinner, button_set, slider, heading, subheading, notice, content, fieldset)
+  - Средней сложности v2.2: 10 типов (accordion, tabbed, typography, spacing, dimensions, border, background, link_color, color_group, image_select)
+  - Высокой сложности v2.3: 8 типов (code_editor, icon, map, sortable, sorter, palette, link, backup)
+- **Обратная совместимость** с предыдущими версиями
+- **Расширяемость** через фильтры и хуки
+
 ### Удалено
 - **Файл field-data.php** — удалён, все примеры встроены в example.php
   - Упрощение структуры проекта
