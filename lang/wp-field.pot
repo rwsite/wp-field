@@ -1,0 +1,152 @@
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: WP_Field — Universal HTML Field Generator\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-12-05 22:56+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: \n"
+"Language: \n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Loco https://localise.biz/\n"
+"X-Loco-Version: 2.8.0; wp-6.9; php-8.3.28\n"
+"X-Domain: wp-field"
+
+#: WP_Field.php:1193
+msgid "Add Item"
+msgstr ""
+
+#. Author of the plugin
+msgid "Aleksei Tikhomirov"
+msgstr ""
+
+#: WP_Field.php:2652
+msgid "Click here"
+msgstr ""
+
+#: WP_Field.php:2699
+msgid "Copy to Clipboard"
+msgstr ""
+
+#: WP_Field.php:2549
+msgid "Disabled"
+msgstr ""
+
+#: WP_Field.php:2700
+msgid "Download JSON"
+msgstr ""
+
+#: WP_Field.php:2528
+msgid "Enabled"
+msgstr ""
+
+#: WP_Field.php:2691
+msgid "Export Settings"
+msgstr ""
+
+#: WP_Field.php:2392
+msgid "Google Maps API key required"
+msgstr ""
+
+#. URI of the plugin
+msgid "https://github.com/rwsite/wp-field-plugin"
+msgstr ""
+
+#. Author URI of the plugin
+msgid "https://rwsite.ru"
+msgstr ""
+
+#: WP_Field.php:2709
+msgid "Import Settings"
+msgstr ""
+
+#: WP_Field.php:2649
+msgid "Link Text"
+msgstr ""
+
+#: WP_Field.php:2669
+msgid "New window"
+msgstr ""
+
+#: WP_Field.php:2702
+msgid "No data to export"
+msgstr ""
+
+#: WP_Field.php:2446 WP_Field.php:2500
+msgid "No options provided"
+msgstr ""
+
+#: WP_Field.php:2583
+msgid "No palettes provided"
+msgstr ""
+
+#: WP_Field.php:2714
+msgid "Paste JSON data here..."
+msgstr ""
+
+#: WP_Field.php:1226
+msgid "Remove"
+msgstr ""
+
+#: WP_Field.php:2667
+msgid "Same window"
+msgstr ""
+
+#: WP_Field.php:2326
+msgid "Search icons..."
+msgstr ""
+
+#: WP_Field.php:2319
+msgid "Select Icon"
+msgstr ""
+
+#: WP_Field.php:2664
+msgid "Target"
+msgstr ""
+
+#. Description of the plugin
+msgid ""
+"Universal HTML field generator for WordPress with 52 field types, dependency "
+"system, all storage types, and built-in WP components. Minimalist, "
+"extensible library for creating fields in WordPress."
+msgstr ""
+
+#: WP_Field.php:2638
+msgid "URL"
+msgstr ""
+
+#: WP_Field.php:2717
+msgid "Validate JSON"
+msgstr ""
+
+#. Name of the plugin
+msgid "WP_Field — Universal HTML Field Generator"
+msgstr ""
+
+#: WP_Field.php:892
+msgid "Добавить галерею"
+msgstr ""
+
+#: WP_Field.php:698 WP_Field.php:772 WP_Field.php:831
+msgid "Загрузить"
+msgstr ""
+
+#: WP_Field.php:697 WP_Field.php:771 WP_Field.php:830
+msgid "Не выбрано"
+msgstr ""
+
+#: WP_Field.php:893
+msgid "Редактировать галерею"
+msgstr ""
+
+#: WP_Field.php:894
+msgid "Сброс"
+msgstr ""
+
+#: WP_Field.php:773
+msgid "Удалить"
+msgstr ""

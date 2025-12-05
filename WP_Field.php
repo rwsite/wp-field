@@ -1,22 +1,26 @@
 <?php
+
 /**
- * Plugin Name: Universal html field generator for WP
- * Plugin URI:  https://rwsite.ru
- * Description: WP library plugin. Universal HTML field generator for WordPress. See usage examples in readme.md
- * Version:     2.5.0
+ * Plugin Name: WP_Field — Universal HTML Field Generator
+ * Plugin URI:  https://github.com/rwsite/wp-field-plugin
+ * Description: Universal HTML field generator for WordPress with 52 field types, dependency system, all storage types, and built-in WP components. Minimalist, extensible library for creating fields in WordPress.
+ * Version:     2.5.1
+ * Requires at least: 5.7
+ * Tested up to: 6.7
+ * Requires PHP: 8.0
  * Author:      Aleksei Tikhomirov
  * Author URI:  https://rwsite.ru
+ * License:     GPL-2.0-or-later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: wp-field
  * Domain Path: /lang/
  *
- * Requires at least: 4.6
- * Requires PHP: 7.4
- *
  * How to use: WP_Field::make(['id' => 'new_id', 'label' => 'New input']);
- * @package wp-field
  */
 
-if (!defined('ABSPATH') || class_exists('WP_Field')) {
+declare(strict_types=1);
+
+if (! defined('ABSPATH') || class_exists('WP_Field')) {
     return;
 }
 
@@ -60,12 +64,7 @@ class WP_Field
     private static bool $assets_enqueued = false;
 
     /**
-     *
-     * @var $field array{ id: string, type: string, label: string, class: string, custom_attributes: array }
-     *     'id': meta-key|option name
-     *     'options': array - for select
-     *     'parse_options' - parse text options as: option:value
-     *     'desc'
+     * @var array{ id: string, type: string, label: string, class: string, custom_attributes: array }
      */
     public $field;
 
@@ -76,15 +75,43 @@ class WP_Field
     public $storage_id;
 
     public string $file;
+
     public string $url;
+
     public string $ver = '2.4.0';
+
+    public function __construct($field, string $storage_type = 'post', $storage_id = null)
+    {
+        self::init_field_types();
+
+        $this->storage_type = $storage_type;
+        $this->storage_id = $storage_id;
+
+        if (! isset($this->storage_id) && $storage_type === 'post') {
+            $this->storage_id = get_the_ID();
+        }
+
+        // Нормализация алиасов полей
+        $field['value'] = $field['value'] ?? $field['val'] ?? null;
+        $field['label'] = $field['title'] ?? $field['label'] ?? null;
+        $field['custom_attributes'] = $field['custom_attributes'] ?? $field['attributes'] ?? $field['attr'] ?? $field['atts'] ?? null;
+
+        $this->field = $this->validate_field_data($field);
+
+        $this->file = self::file;
+        $this->url = plugin_dir_url($this->file);
+        $this->ver = defined('WP_DEBUG') && WP_DEBUG ? time() : $this->ver;
+
+        // Однократная инициализация assets
+        $this->maybe_enqueue_assets();
+    }
 
     /**
      * Инициализация реестра типов полей (однократно)
      */
     public static function init_field_types(): void
     {
-        if (!empty(self::$field_types)) {
+        if (! empty(self::$field_types)) {
             return;
         }
 
@@ -161,32 +188,6 @@ class WP_Field
         self::$field_types['imagepicker'] = self::$field_types['image_picker'];
     }
 
-    public function __construct($field, string $storage_type = 'post', $storage_id = null)
-    {
-        self::init_field_types();
-
-        $this->storage_type = $storage_type;
-        $this->storage_id = $storage_id;
-
-        if (!isset($this->storage_id) && $storage_type === 'post') {
-            $this->storage_id = get_the_ID();
-        }
-
-        // Нормализация алиасов полей
-        $field['value'] = $field['value'] ?? $field['val'] ?? null;
-        $field['label'] = $field['title'] ?? $field['label'] ?? null;
-        $field['custom_attributes'] = $field['custom_attributes'] ?? $field['attributes'] ?? $field['attr'] ?? $field['atts'] ?? null;
-
-        $this->field = $this->validate_field_data($field);
-
-        $this->file = self::file;
-        $this->url = plugin_dir_url($this->file);
-        $this->ver = defined('WP_DEBUG') && WP_DEBUG ? time() : $this->ver;
-
-        // Однократная инициализация assets
-        $this->maybe_enqueue_assets();
-    }
-
     /**
      * Validate field data before rendering
      */
@@ -202,8 +203,9 @@ class WP_Field
             parse_str($str, $field);
         }
 
-        if (empty($field) || !isset($field['id'], $field['type'], $field['label']) || !is_array($field)) {
-            trigger_error('!!! Incorrect field data ' . print_r($field, true));
+        if (empty($field) || ! isset($field['id'], $field['type'], $field['label']) || ! is_array($field)) {
+            trigger_error('!!! Incorrect field data '.print_r($field, true));
+
             return 'Incorrect field data';
         }
 
@@ -211,176 +213,11 @@ class WP_Field
     }
 
     /**
-     * Make new filed
-     *
-     * @param array $params data, type, id,
-     * @param bool $output html|string
-     *
-     * @return false|string|null
-     */
-    public static function make(array $params, bool $output = true)
-    {
-        if (isset($params[0]) && is_array($params[0])) {
-            $obj = new self($params[0], $params[1]??'post', $params[2]??null);
-        } else {
-            $obj = new self($params);
-        }
-        return $obj->render($output);
-    }
-
-    /**
-     * Рендер поля с wrapper'ом
-     *
-     * @param bool $output выводить HTML или вернуть строку
-     * @return false|string|void
-     */
-    public function render($output = true)
-    {
-        if (!$output) {
-            ob_start();
-        }
-
-        // Определяем видимость по зависимостям
-        $is_hidden = $this->is_field_hidden();
-        $hidden_class = $is_hidden ? ' is-hidden' : '';
-        $dependency_data = $this->get_dependency_data();
-
-        // Открываем wrapper
-        printf(
-            '<div class="wp-field wp-field-%s%s" data-field-id="%s" data-field-type="%s"%s>',
-            esc_attr($this->field['type']),
-            $hidden_class,
-            esc_attr($this->field['id']),
-            esc_attr($this->field['type']),
-            $dependency_data ? ' data-dependency=\'' . esc_attr($dependency_data) . '\'' : ''
-        );
-
-        // Рендерим поле через реестр
-        $this->render_field();
-
-        // Закрываем wrapper
-        echo '</div>';
-
-        if (!$output) {
-            return ob_get_clean();
-        }
-    }
-
-    /**
-     * Рендер поля по типу из реестра
-     */
-    private function render_field(): void
-    {
-        $type = $this->field['type'] ?? 'text';
-
-        if (!isset(self::$field_types[$type])) {
-            trigger_error("Неизвестный тип поля: {$type}");
-            return;
-        }
-
-        [$method, $defaults] = self::$field_types[$type];
-
-        // Мержим дефолты с полем
-        $field = array_merge($defaults, $this->field);
-
-        // Вызываем метод рендера
-        if (method_exists($this, $method)) {
-            $this->$method($field);
-        } else {
-            trigger_error("Метод рендера не найден: {$method}");
-        }
-    }
-
-    /**
-     * Проверка, скрыто ли поле по зависимостям
-     */
-    private function is_field_hidden(): bool
-    {
-        if (empty($this->field['dependency'])) {
-            return false;
-        }
-
-        return !$this->evaluate_dependency($this->field['dependency']);
-    }
-
-    /**
-     * Оценка условия зависимости
-     */
-    private function evaluate_dependency(array $dependency): bool
-    {
-        $relation = $dependency['relation'] ?? 'AND';
-        $conditions = array_filter($dependency, fn($k) => $k !== 'relation', ARRAY_FILTER_USE_KEY);
-
-        if (empty($conditions)) {
-            return true;
-        }
-
-        $results = [];
-        foreach ($conditions as $condition) {
-            if (!is_array($condition) || count($condition) < 3) {
-                continue;
-            }
-
-            [$field_id, $operator, $value] = $condition;
-            $field_value = $this->get_value_for_dependency($field_id);
-            $results[] = $this->evaluate_condition($field_value, $operator, $value);
-        }
-
-        if (empty($results)) {
-            return true;
-        }
-
-        return 'AND' === $relation ? !in_array(false, $results, true) : in_array(true, $results, true);
-    }
-
-    /**
-     * Получить значение поля для проверки зависимости
-     */
-    private function get_value_for_dependency(string $field_id)
-    {
-        return $this->get_value($field_id, $this->storage_id);
-    }
-
-    /**
-     * Оценить одно условие
-     */
-    private function evaluate_condition($field_value, string $operator, $compare_value): bool
-    {
-        return match ($operator) {
-            '==' => $field_value == $compare_value,
-            '!=' => $field_value != $compare_value,
-            '>' => $field_value > $compare_value,
-            '>=' => $field_value >= $compare_value,
-            '<' => $field_value < $compare_value,
-            '<=' => $field_value <= $compare_value,
-            'in' => is_array($compare_value) && in_array($field_value, $compare_value, true),
-            'not_in' => is_array($compare_value) && !in_array($field_value, $compare_value, true),
-            'contains' => is_string($field_value) && str_contains($field_value, (string)$compare_value),
-            'not_contains' => is_string($field_value) && !str_contains($field_value, (string)$compare_value),
-            'empty' => empty($field_value),
-            'not_empty' => !empty($field_value),
-            default => false,
-        };
-    }
-
-    /**
-     * Получить JSON данные зависимостей для JS
-     */
-    private function get_dependency_data(): string
-    {
-        if (empty($this->field['dependency'])) {
-            return '';
-        }
-
-        return wp_json_encode($this->field['dependency']);
-    }
-
-    /**
      * Однократная инициализация assets
      */
     private function maybe_enqueue_assets(): void
     {
-        if (self::$assets_enqueued || !is_admin()) {
+        if (self::$assets_enqueued || ! is_admin()) {
             return;
         }
 
@@ -410,18 +247,18 @@ class WP_Field
         // Наш JS для зависимостей и инициализации
         wp_enqueue_script(
             'wp-field-main',
-            $this->url . 'assets/js/wp-field.js',
+            $this->url.'assets/js/wp-field.js',
             ['jquery'],
             $this->ver,
-            true
+            true,
         );
 
         // Наш CSS
         wp_enqueue_style(
             'wp-field-main',
-            $this->url . 'assets/css/wp-field.css',
+            $this->url.'assets/css/wp-field.css',
             [],
-            $this->ver
+            $this->ver,
         );
 
         // Локализация
@@ -446,2095 +283,8 @@ class WP_Field
             esc_attr($this->get_field_value($field)),
             esc_attr($field['placeholder'] ?? ''),
             $this->get_field_attributes($field),
-            $this->get_readonly_disabled($field)
-        );
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер числового поля
-     */
-    private function render_number(array $field): void
-    {
-        $this->render_label($field);
-
-        printf(
-            '<input class="%s" id="%s" name="%s" type="number" value="%s" %s %s %s %s>',
-            esc_attr($field['class'] ?? 'regular-text'),
-            esc_attr($field['id']),
-            esc_attr($field['name'] ?? $field['id']),
-            esc_attr($this->get_field_value($field)),
-            isset($field['min']) ? 'min="' . esc_attr($field['min']) . '"' : '',
-            isset($field['max']) ? 'max="' . esc_attr($field['max']) . '"' : '',
-            isset($field['step']) ? 'step="' . esc_attr($field['step']) . '"' : '',
-            $this->get_field_attributes($field),
-            $this->get_readonly_disabled($field)
-        );
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер textarea
-     */
-    private function render_textarea(array $field): void
-    {
-        $this->render_label($field);
-
-        printf(
-            '<textarea class="%s" id="%s" name="%s" rows="%d" %s %s>%s</textarea>',
-            esc_attr($field['class'] ?? 'regular-text'),
-            esc_attr($field['id']),
-            esc_attr($field['name'] ?? $field['id']),
-            absint($field['rows'] ?? 5),
-            $this->get_field_attributes($field),
             $this->get_readonly_disabled($field),
-            esc_textarea($this->get_field_value($field))
         );
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер select
-     */
-    private function render_select(array $field): void
-    {
-        $this->render_label($field);
-
-        $multiple = !empty($field['multiple']) ? ' multiple="multiple"' : '';
-
-        // Для multiselect добавляем [] к имени, чтобы PHP получил массив значений
-        $name = $field['name'] ?? $field['id'];
-        if (!empty($field['multiple']) && !str_ends_with($name, '[]')) {
-            $name .= '[]';
-        }
-
-        printf(
-            '<select class="%s" id="%s" name="%s"%s %s>%s</select>',
-            esc_attr($field['class'] ?? ''),
-            esc_attr($field['id']),
-            esc_attr($name),
-            $multiple,
-            $this->get_field_attributes($field),
-            $this->render_select_options($field)
-        );
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер опций select
-     */
-    private function render_select_options(array $field): string
-    {
-        $options = $field['options'] ?? [];
-        $value = $this->get_field_value($field);
-
-        if (is_string($options)) {
-            $options = array_filter(array_map('trim', explode("\n", $options)));
-        }
-
-        $output = [];
-
-        foreach ($options as $opt_value => $opt_label) {
-            // Поддержка parse_options: "label:value"
-            if (!empty($field['parse_options']) && is_string($opt_label) && str_contains($opt_label, ':')) {
-                [$opt_label, $opt_value] = array_map('trim', explode(':', $opt_label, 2));
-            }
-
-            $selected = $this->is_value_selected($value, $opt_value) ? ' selected' : '';
-
-            $output[] = sprintf(
-                '<option value="%s"%s>%s</option>',
-                esc_attr($opt_value),
-                $selected,
-                esc_html($opt_label)
-            );
-        }
-
-        return implode('', $output);
-    }
-
-    /**
-     * Рендер radio
-     */
-    private function render_radio(array $field): void
-    {
-        $this->render_label($field);
-
-        $options = $field['options'] ?? [];
-        $value = $this->get_field_value($field);
-
-        if (is_string($options)) {
-            $options = array_filter(array_map('trim', explode("\n", $options)));
-        }
-
-        $output = [];
-        $i = 0;
-
-        foreach ($options as $opt_value => $opt_label) {
-            $checked = $this->is_value_selected($value, $opt_value) ? ' checked' : '';
-
-            $output[] = sprintf(
-                '<label><input type="radio" name="%s" value="%s" id="%s-%d"%s> %s</label>',
-                esc_attr($field['name'] ?? $field['id']),
-                esc_attr($opt_value),
-                esc_attr($field['id']),
-                $i,
-                $checked,
-                esc_html($opt_label)
-            );
-
-            $i++;
-        }
-
-        echo '<div class="wp-field-radio-group">' . implode('', $output) . '</div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер одиночного checkbox
-     */
-    private function render_checkbox(array $field): void
-    {
-        $value = $this->get_field_value($field);
-        $checked = $this->is_checked($value) ? ' checked' : '';
-
-        printf(
-            '<input type="checkbox" id="%s" name="%s" value="1"%s %s>',
-            esc_attr($field['id']),
-            esc_attr($field['name'] ?? $field['id']),
-            $checked,
-            $this->get_field_attributes($field)
-        );
-
-        $this->render_label($field);
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер группы checkbox'ов
-     */
-    private function render_checkbox_group(array $field): void
-    {
-        $this->render_label($field);
-
-        $options = $field['options'] ?? [];
-        $values = (array)$this->get_field_value($field);
-
-        if (is_string($options)) {
-            $options = array_filter(array_map('trim', explode("\n", $options)));
-        }
-
-        $output = [];
-        $i = 0;
-
-        foreach ($options as $opt_value => $opt_label) {
-            $checked = in_array($opt_value, $values, true) ? ' checked' : '';
-
-            $output[] = sprintf(
-                '<label><input type="checkbox" name="%s[]" value="%s" id="%s-%d"%s> %s</label>',
-                esc_attr($field['name'] ?? $field['id']),
-                esc_attr($opt_value),
-                esc_attr($field['id']),
-                $i,
-                $checked,
-                esc_html($opt_label)
-            );
-
-            $i++;
-        }
-
-        echo '<div class="wp-field-checkbox-group">' . implode('', $output) . '</div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер wp_editor
-     */
-    private function render_editor(array $field): void
-    {
-        $this->render_label($field);
-
-        if (function_exists('wp_editor')) {
-            wp_editor($this->get_field_value($field), $field['id'], [
-                'wpautop' => !empty($field['wpautop']),
-                'media_buttons' => !empty($field['media_buttons']),
-                'textarea_name' => $field['name'] ?? $field['id'],
-                'textarea_rows' => absint($field['rows'] ?? 10),
-                'teeny' => !empty($field['teeny']),
-            ]);
-        } else {
-            trigger_error('wp_editor не найден');
-        }
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер media (ID или URL)
-     */
-    private function render_media(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = $this->get_field_value($field);
-        $preview = !empty($field['preview']) ? $field['preview'] : true;
-        $url = !empty($field['url']) ? $field['url'] : true;
-        $placeholder = $field['placeholder'] ?? __('Не выбрано', 'wp-field');
-        $button_text = $field['button_text'] ?? __('Загрузить', 'wp-field');
-        $library = $field['library'] ?? ''; // image, video, audio
-
-        // Получаем URL файла если есть ID
-        $file_url = '';
-        $file_name = '';
-        if ($value && is_numeric($value)) {
-            $file_url = wp_get_attachment_url($value);
-            $file_name = basename($file_url);
-        } elseif ($value) {
-            $file_url = $value;
-            $file_name = basename($value);
-        }
-
-        echo '<div class="wp-field-media-wrapper">';
-
-        // Поле ввода с placeholder
-        if ($url) {
-            printf(
-                '<input type="text" class="regular-text wp-field-media-url" value="%s" placeholder="%s" readonly>',
-                esc_attr($file_url),
-                esc_attr($placeholder)
-            );
-        }
-
-        // Hidden поле для ID
-        printf(
-            '<input type="hidden" id="%s" name="%s" value="%s" class="wp-field-media-id">',
-            esc_attr($field['id']),
-            esc_attr($field['name'] ?? $field['id']),
-            esc_attr($value)
-        );
-
-        // Кнопка загрузки
-        printf(
-            '<button type="button" class="button wp-field-media-button" data-field-id="%s" data-library="%s">%s</button>',
-            esc_attr($field['id']),
-            esc_attr($library),
-            esc_html($button_text)
-        );
-
-        // Превью если включено
-        if ($preview && $file_url) {
-            $mime_type = '';
-            if (is_numeric($value)) {
-                $mime_type = get_post_mime_type($value);
-            }
-
-            echo '<div class="wp-field-media-preview">';
-            if (strpos($mime_type, 'image') !== false || (!$mime_type && preg_match('/\.(jpg|jpeg|png|gif|webp|svg)$/i', $file_url))) {
-                printf('<img src="%s" alt="">', esc_url($file_url));
-            } else {
-                printf('<span class="wp-field-media-filename">%s</span>', esc_html($file_name));
-            }
-            echo '</div>';
-        }
-
-        echo '</div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер image
-     */
-    private function render_image(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = $this->get_field_value($field);
-        $src = is_numeric($value) ? wp_get_attachment_url($value) : $value;
-        $preview = !empty($field['preview']) ? $field['preview'] : true;
-        $url = !empty($field['url']) ? $field['url'] : true;
-        $placeholder = $field['placeholder'] ?? __('Не выбрано', 'wp-field');
-        $button_text = $field['button_text'] ?? __('Загрузить', 'wp-field');
-        $remove_text = $field['remove_text'] ?? __('Удалить', 'wp-field');
-
-        echo '<div class="wp-field-image-wrapper">';
-
-        // Поле ввода с URL если включено
-        if ($url) {
-            printf(
-                '<input type="text" class="regular-text wp-field-image-url" value="%s" placeholder="%s" readonly>',
-                esc_attr($src),
-                esc_attr($placeholder)
-            );
-        }
-
-        // Hidden поле для ID
-        printf(
-            '<input type="hidden" id="%s" name="%s" value="%s" class="wp-field-image-id">',
-            esc_attr($field['id']),
-            esc_attr($field['name'] ?? $field['id']),
-            esc_attr($value)
-        );
-
-        // Кнопки
-        printf(
-            '<button type="button" class="button wp-field-image-button" data-field-id="%s">%s</button>',
-            esc_attr($field['id']),
-            esc_html($button_text)
-        );
-
-        if ($value) {
-            printf(
-                '<button type="button" class="button wp-field-image-remove" data-field-id="%s">%s</button>',
-                esc_attr($field['id']),
-                esc_html($remove_text)
-            );
-        }
-
-        // Превью если включено
-        if ($preview && $src) {
-            echo '<div class="wp-field-image-preview-wrapper">';
-            printf('<img src="%s" alt="" class="wp-field-image-preview">', esc_url($src));
-            echo '</div>';
-        }
-
-        echo '</div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер file
-     */
-    private function render_file(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = $this->get_field_value($field);
-        $url = !empty($field['url']) ? $field['url'] : true;
-        $placeholder = $field['placeholder'] ?? __('Не выбрано', 'wp-field');
-        $button_text = $field['button_text'] ?? __('Загрузить', 'wp-field');
-        $library = $field['library'] ?? ''; // image, video, audio
-
-        // Получаем URL файла если есть ID
-        $file_url = '';
-        $file_name = '';
-        if ($value && is_numeric($value)) {
-            $file_url = wp_get_attachment_url($value);
-            $file_name = basename($file_url);
-        } elseif ($value) {
-            $file_url = $value;
-            $file_name = basename($value);
-        }
-
-        echo '<div class="wp-field-file-wrapper">';
-
-        // Поле ввода с URL если включено
-        if ($url) {
-            printf(
-                '<input type="text" class="regular-text wp-field-file-url" value="%s" placeholder="%s" readonly>',
-                esc_attr($file_url),
-                esc_attr($placeholder)
-            );
-        }
-
-        // Hidden поле для ID
-        printf(
-            '<input type="hidden" id="%s" name="%s" value="%s" class="wp-field-file-id">',
-            esc_attr($field['id']),
-            esc_attr($field['name'] ?? $field['id']),
-            esc_attr($value)
-        );
-
-        // Кнопка загрузки
-        printf(
-            '<button type="button" class="button wp-field-file-button" data-field-id="%s" data-library="%s">%s</button>',
-            esc_attr($field['id']),
-            esc_attr($library),
-            esc_html($button_text)
-        );
-
-        // Показываем имя файла если выбран
-        if ($file_name) {
-            printf('<span class="wp-field-file-name">%s</span>', esc_html($file_name));
-        }
-
-        echo '</div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер gallery
-     */
-    private function render_gallery(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = $this->get_field_value($field);
-        $ids = is_array($value) ? $value : array_filter(explode(',', $value));
-
-        $add_text = $field['add_button'] ?? __('Добавить галерею', 'wp-field');
-        $edit_text = $field['edit_button'] ?? __('Редактировать галерею', 'wp-field');
-        $remove_text = $field['clear_button'] ?? __('Сброс', 'wp-field');
-
-        echo '<div class="wp-field-gallery-wrapper">';
-
-        // Hidden поле для хранения ID изображений
-        printf(
-            '<input type="hidden" id="%s" name="%s" value="%s" class="wp-field-gallery-ids">',
-            esc_attr($field['id']),
-            esc_attr($field['name'] ?? $field['id']),
-            esc_attr(implode(',', $ids))
-        );
-
-        // Контейнер для превью изображений
-        echo '<div class="wp-field-gallery-preview">';
-        if (!empty($ids)) {
-            foreach ($ids as $id) {
-                if (is_numeric($id)) {
-                    $img_url = wp_get_attachment_image_url($id, 'thumbnail');
-                    if ($img_url) {
-                        printf(
-                            '<div class="wp-field-gallery-item" data-id="%s"><img src="%s" alt=""><span class="wp-field-gallery-remove" data-id="%s">×</span></div>',
-                            esc_attr($id),
-                            esc_url($img_url),
-                            esc_attr($id)
-                        );
-                    }
-                }
-            }
-        }
-        echo '</div>';
-
-        // Кнопки управления
-        echo '<div class="wp-field-gallery-buttons">';
-        printf(
-            '<button type="button" class="button wp-field-gallery-add" data-field-id="%s">%s</button>',
-            esc_attr($field['id']),
-            esc_html($add_text)
-        );
-        printf(
-            '<button type="button" class="button wp-field-gallery-edit" data-field-id="%s">%s</button>',
-            esc_attr($field['id']),
-            esc_html($edit_text)
-        );
-        printf(
-            '<button type="button" class="button wp-field-gallery-clear" data-field-id="%s">%s</button>',
-            esc_attr($field['id']),
-            esc_html($remove_text)
-        );
-        echo '</div>';
-
-        echo '</div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер color picker
-     */
-    private function render_color(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = $this->get_field_value($field);
-        $default = $field['default'] ?? '#000000';
-        $alpha = isset($field['alpha']) && $field['alpha'] === false ? 'false' : 'true';
-
-        printf(
-            '<input type="text" id="%s" name="%s" value="%s" class="wp-color-picker-field" data-default-color="%s" data-alpha="%s" %s>',
-            esc_attr($field['id']),
-            esc_attr($field['name'] ?? $field['id']),
-            esc_attr($value),
-            esc_attr($default),
-            esc_attr($alpha),
-            $this->get_field_attributes($field)
-        );
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер date/time/datetime
-     */
-    private function render_date(array $field): void
-    {
-        $this->render_label($field);
-
-        printf(
-            '<input class="%s" id="%s" name="%s" type="%s" value="%s" %s>',
-            esc_attr($field['class'] ?? 'regular-text'),
-            esc_attr($field['id']),
-            esc_attr($field['name'] ?? $field['id']),
-            esc_attr($field['type'] ?? 'date'),
-            esc_attr($this->get_field_value($field)),
-            $this->get_field_attributes($field)
-        );
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер group (вложенные поля)
-     */
-    private function render_group(array $field): void
-    {
-        $this->render_label($field);
-
-        if (empty($field['fields'])) {
-            return;
-        }
-
-        echo '<div class="wp-field-group">';
-
-        foreach ($field['fields'] as $sub_field) {
-            $sub_field['name'] = $field['name'] ?? $field['id'];
-            $obj = new self($sub_field, $this->storage_type, $this->storage_id);
-            $obj->render(true);
-        }
-
-        echo '</div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер repeater (массив элементов)
-     */
-    private function render_repeater(array $field): void
-    {
-        $this->render_label($field);
-
-        $values = (array) $this->get_field_value($field);
-        $min = absint($field['min'] ?? 0);
-        $max = absint($field['max'] ?? 0);
-
-        echo '<div class="wp-field-repeater" data-field-id="' . esc_attr($field['id']) . '" data-min="' . $min . '" data-max="' . $max . '">';
-
-        // Рендерим существующие элементы
-        if (!empty($values)) {
-            foreach ($values as $index => $item) {
-                $this->render_repeater_item($field, $index, $item);
-            }
-        }
-
-        // Всегда добавляем один шаблон для клонирования (скрыт через CSS)
-        $this->render_repeater_item($field, 0, [], true);
-
-        echo '</div>';
-
-        printf(
-            '<button type="button" class="button wp-field-repeater-add" data-field-id="%s">%s</button>',
-            esc_attr($field['id']),
-            esc_html($field['add_text'] ?? __('Add Item', 'wp-field'))
-        );
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер одного элемента repeater
-     */
-    private function render_repeater_item(array $field, int $index, $item = [], bool $template = false): void
-    {
-        $class = $template ? ' wp-field-repeater-template' : '';
-
-        printf(
-            '<div class="wp-field-repeater-item%s" data-index="%d">',
-            $class,
-            $index
-        );
-
-        if (!empty($field['fields'])) {
-            foreach ($field['fields'] as $sub_field) {
-                // Формируем правильный name: parent_name[index][subfield_id]
-                $parent_name = $field['name'] ?? $field['id'];
-                $sub_field['name'] = sprintf('%s[%d][%s]', $parent_name, $index, $sub_field['id']);
-                $sub_field['value'] = is_array($item) && isset($item[$sub_field['id']]) ? $item[$sub_field['id']] : null;
-
-                $obj = new self($sub_field, $this->storage_type, $this->storage_id);
-                $obj->render(true);
-            }
-        }
-
-        printf(
-            '<button type="button" class="button wp-field-repeater-remove">%s</button>',
-            esc_html(__('Remove', 'wp-field'))
-        );
-
-        echo '</div>';
-    }
-
-    /**
-     * Рендер image picker (legacy)
-     */
-    private function render_image_picker(array $field): void
-    {
-        // Используем select с data-img-src для каждой опции
-        $this->render_label($field);
-
-        $options = $field['options'] ?? [];
-        $value = $this->get_field_value($field);
-
-        printf(
-            '<select class="wp-field-image-picker" id="%s" name="%s">',
-            esc_attr($field['id']),
-            esc_attr($field['name'] ?? $field['id'])
-        );
-
-        foreach ($options as $opt_value => $opt_data) {
-            $selected = $value === $opt_value ? ' selected' : '';
-            $img_src = is_array($opt_data) ? ($opt_data['src'] ?? '') : $opt_data;
-
-            printf(
-                '<option value="%s" data-img-src="%s"%s>%s</option>',
-                esc_attr($opt_value),
-                esc_url($img_src),
-                $selected,
-                esc_html(is_array($opt_data) ? ($opt_data['label'] ?? $opt_value) : $opt_value)
-            );
-        }
-
-        echo '</select>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер switcher (переключатель on/off)
-     */
-    private function render_switcher(array $field): void
-    {
-        $value = $this->get_field_value($field);
-        $checked = !empty($value) ? 'checked' : '';
-        $text_on = $field['text_on'] ?? 'On';
-        $text_off = $field['text_off'] ?? 'Off';
-
-        printf(
-            '<label class="wp-field-switcher">
-                <input type="checkbox" name="%s" value="1" %s %s %s />
-                <span class="wp-field-switcher-slider">
-                    <span class="wp-field-switcher-on">%s</span>
-                    <span class="wp-field-switcher-off">%s</span>
-                </span>
-            </label>',
-            esc_attr($field['name'] ?? $field['id']),
-            $checked,
-            $this->get_field_attributes($field),
-            $this->get_readonly_disabled($field),
-            esc_html($text_on),
-            esc_html($text_off)
-        );
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер spinner (счётчик с кнопками)
-     */
-    private function render_spinner(array $field): void
-    {
-        $value = $this->get_field_value($field);
-        $min = $field['min'] ?? 0;
-        $max = $field['max'] ?? 100;
-        $step = $field['step'] ?? 1;
-        $unit = $field['unit'] ?? '';
-
-        echo '<div class="wp-field-spinner">';
-
-        // Кнопка уменьшения
-        printf(
-            '<button type="button" class="wp-field-spinner-btn wp-field-spinner-down" data-step="%s">◄</button>',
-            esc_attr($step)
-        );
-
-        // Обёртка для input + unit
-        echo '<div class="wp-field-spinner-input-wrap">';
-
-        printf(
-            '<input type="number" name="%s" value="%s" min="%s" max="%s" step="%s" %s %s />',
-            esc_attr($field['name'] ?? $field['id']),
-            esc_attr($value),
-            esc_attr($min),
-            esc_attr($max),
-            esc_attr($step),
-            $this->get_field_attributes($field),
-            $this->get_readonly_disabled($field)
-        );
-
-        // Unit внутри обёртки справа
-        if ($unit) {
-            printf('<span class="wp-field-spinner-unit">%s</span>', esc_html($unit));
-        }
-
-        echo '</div>';
-
-        // Кнопка увеличения
-        printf(
-            '<button type="button" class="wp-field-spinner-btn wp-field-spinner-up" data-step="%s">►</button>',
-            esc_attr($step)
-        );
-
-        echo '</div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер button_set (группа кнопок для выбора)
-     */
-    private function render_button_set(array $field): void
-    {
-        $value = $this->get_field_value($field);
-        $options = $field['options'] ?? [];
-        $multiple = !empty($field['multiple']);
-
-        if (empty($options)) {
-            echo '<p class="description">No options provided</p>';
-            return;
-        }
-
-        echo '<div class="wp-field-button-set">';
-
-        if ($multiple) {
-            $values = is_array($value) ? $value : ($value ? [$value] : []);
-            foreach ($options as $key => $label) {
-                $checked = in_array($key, $values) ? 'checked' : '';
-                printf(
-                    '<label class="wp-field-button-set-item %s">
-                        <input type="checkbox" name="%s[]" value="%s" %s %s />
-                        <span>%s</span>
-                    </label>',
-                    $checked ? 'active' : '',
-                    esc_attr($field['name'] ?? $field['id']),
-                    esc_attr($key),
-                    $checked,
-                    $this->get_field_attributes($field),
-                    esc_html($label)
-                );
-            }
-        } else {
-            foreach ($options as $key => $label) {
-                $checked = $value === $key ? 'checked' : '';
-                printf(
-                    '<label class="wp-field-button-set-item %s">
-                        <input type="radio" name="%s" value="%s" %s %s />
-                        <span>%s</span>
-                    </label>',
-                    $checked ? 'active' : '',
-                    esc_attr($field['name'] ?? $field['id']),
-                    esc_attr($key),
-                    $checked,
-                    $this->get_field_attributes($field),
-                    esc_html($label)
-                );
-            }
-        }
-
-        echo '</div>';
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер slider (ползунок)
-     */
-    private function render_slider(array $field): void
-    {
-        $value = $this->get_field_value($field);
-        $min = $field['min'] ?? 0;
-        $max = $field['max'] ?? 100;
-        $step = $field['step'] ?? 1;
-        $show_value = !empty($field['show_value']);
-
-        printf(
-            '<div class="wp-field-slider-wrapper">
-                <input type="range" class="wp-field-slider" name="%s" value="%s" min="%s" max="%s" step="%s" %s %s />
-                %s
-            </div>',
-            esc_attr($field['name'] ?? $field['id']),
-            esc_attr($value),
-            esc_attr($min),
-            esc_attr($max),
-            esc_attr($step),
-            $this->get_field_attributes($field),
-            $this->get_readonly_disabled($field),
-            $show_value ? '<span class="wp-field-slider-value">' . esc_html($value) . '</span>' : ''
-        );
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер heading (заголовок)
-     */
-    private function render_heading(array $field): void
-    {
-        $tag = $field['tag'] ?? 'h3';
-        $class = $field['class'] ?? 'wp-field-heading';
-
-        printf(
-            '<%s class="%s">%s</%s>',
-            tag_escape($tag),
-            esc_attr($class),
-            esc_html($field['label'] ?? ''),
-            tag_escape($tag)
-        );
-    }
-
-    /**
-     * Рендер subheading (подзаголовок)
-     */
-    private function render_subheading(array $field): void
-    {
-        $tag = $field['tag'] ?? 'h4';
-        $class = $field['class'] ?? 'wp-field-subheading';
-
-        printf(
-            '<%s class="%s">%s</%s>',
-            tag_escape($tag),
-            esc_attr($class),
-            esc_html($field['label'] ?? ''),
-            tag_escape($tag)
-        );
-    }
-
-    /**
-     * Рендер notice (уведомление)
-     */
-    private function render_notice(array $field): void
-    {
-        $type = $field['type_notice'] ?? $field['notice_type'] ?? 'info';
-        $class = 'wp-field-notice wp-field-notice-' . esc_attr($type);
-
-        printf(
-            '<div class="%s">%s</div>',
-            $class,
-            wp_kses_post($field['label'] ?? '')
-        );
-    }
-
-    /**
-     * Рендер content (контент/HTML)
-     */
-    private function render_content(array $field): void
-    {
-        echo wp_kses_post($field['label'] ?? '');
-    }
-
-    /**
-     * Рендер fieldset (группировка полей)
-     */
-    private function render_fieldset(array $field): void
-    {
-        $legend = $field['legend'] ?? $field['label'] ?? '';
-        $class = $field['class'] ?? 'wp-field-fieldset';
-
-        printf(
-            '<fieldset class="%s">',
-            esc_attr($class)
-        );
-
-        if ($legend) {
-            printf(
-                '<legend>%s</legend>',
-                esc_html($legend)
-            );
-        }
-
-        // Рендер вложенных полей если они есть
-        if (!empty($field['fields']) && is_array($field['fields'])) {
-            foreach ($field['fields'] as $nested_field) {
-                WP_Field::make($nested_field, true);
-            }
-        }
-
-        echo '</fieldset>';
-    }
-
-    /**
-     * Рендер accordion (свёртываемые секции)
-     */
-    private function render_accordion(array $field): void
-    {
-        $this->render_label($field);
-
-        // Поддерживаем оба варианта: items и sections
-        $items = $field['items'] ?? $field['sections'] ?? [];
-
-        if (empty($items) || !is_array($items)) {
-            echo '<p class="description">No items provided</p>';
-            return;
-        }
-
-        echo '<div class="wp-field-accordion" data-field-id="' . esc_attr($field['id']) . '">';
-
-        foreach ($items as $index => $item) {
-            $title = $item['title'] ?? 'Item ' . ($index + 1);
-            $content = $item['content'] ?? '';
-            $fields = $item['fields'] ?? [];
-            $open = !empty($item['open']);
-
-            printf(
-                '<div class="wp-field-accordion-item %s" data-index="%d">
-                    <div class="wp-field-accordion-header">
-                        <span class="wp-field-accordion-icon">%s</span>
-                        <span class="wp-field-accordion-title">%s</span>
-                    </div>
-                    <div class="wp-field-accordion-content">',
-                $open ? 'is-open' : '',
-                $index,
-                $open ? '▼' : '▶',
-                esc_html($title)
-            );
-
-            if ($content) {
-                echo wp_kses_post($content);
-            }
-
-            if (!empty($fields)) {
-                foreach ($fields as $sub_field) {
-                    $obj = new self($sub_field, $this->storage_type, $this->storage_id);
-                    $obj->render(true);
-                }
-            }
-
-            echo '</div></div>';
-        }
-
-        echo '</div>';
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер tabbed (вкладки)
-     */
-    private function render_tabbed(array $field): void
-    {
-        $this->render_label($field);
-
-        if (empty($field['tabs']) || !is_array($field['tabs'])) {
-            echo '<p class="description">No tabs provided</p>';
-            return;
-        }
-
-        $field_id = esc_attr($field['id']);
-
-        // Определяем, какая вкладка должна быть активной по умолчанию
-        $default_active_index = 0;
-        foreach ($field['tabs'] as $index => $tab) {
-            if (!empty($tab['active'])) {
-                $default_active_index = $index;
-                break;
-            }
-        }
-
-        echo '<div class="wp-field-tabbed" data-field-id="' . $field_id . '" data-default-tab="' . $default_active_index . '">';
-        echo '<div class="wp-field-tabbed-nav">';
-
-        foreach ($field['tabs'] as $index => $tab) {
-            $title = $tab['title'] ?? 'Tab ' . ($index + 1);
-            $icon = $tab['icon'] ?? '';
-            $active = $index === $default_active_index ? 'active' : '';
-
-            printf(
-                '<button type="button" class="wp-field-tabbed-nav-item %s" data-tab="%s-%d">
-                    %s<span>%s</span>
-                </button>',
-                $active,
-                $field_id,
-                $index,
-                $icon ? '<span class="wp-field-tabbed-icon">' . esc_html($icon) . '</span>' : '',
-                esc_html($title)
-            );
-        }
-
-        echo '</div><div class="wp-field-tabbed-content">';
-
-        foreach ($field['tabs'] as $index => $tab) {
-            $content = $tab['content'] ?? '';
-            $fields = $tab['fields'] ?? [];
-            $active = $index === $default_active_index ? 'active' : '';
-
-            printf(
-                '<div class="wp-field-tabbed-pane %s" data-tab="%s-%d">',
-                $active,
-                $field_id,
-                $index
-            );
-
-            if ($content) {
-                echo wp_kses_post($content);
-            }
-
-            if (!empty($fields)) {
-                foreach ($fields as $sub_field) {
-                    $obj = new self($sub_field, $this->storage_type, $this->storage_id);
-                    $obj->render(true);
-                }
-            }
-
-            echo '</div>';
-        }
-
-        echo '</div></div>';
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер typography (типография)
-     */
-    private function render_typography(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = (array)$this->get_field_value($field);
-        $name = $field['name'] ?? $field['id'];
-
-        $defaults = [
-            'font_family' => $value['font_family'] ?? '',
-            'font_size' => $value['font_size'] ?? '',
-            'font_weight' => $value['font_weight'] ?? '',
-            'line_height' => $value['line_height'] ?? '',
-            'text_align' => $value['text_align'] ?? '',
-            'text_transform' => $value['text_transform'] ?? '',
-            'color' => $value['color'] ?? '',
-        ];
-
-        echo '<div class="wp-field-typography">';
-
-        // Font Family
-        printf(
-            '<div class="wp-field-typography-item">
-                <label>Font Family</label>
-                <select name="%s[font_family]">
-                    <option value="">Default</option>
-                    <option value="Arial" %s>Arial</option>
-                    <option value="Helvetica" %s>Helvetica</option>
-                    <option value="Times New Roman" %s>Times New Roman</option>
-                    <option value="Georgia" %s>Georgia</option>
-                    <option value="Verdana" %s>Verdana</option>
-                </select>
-            </div>',
-            esc_attr($name),
-            selected($defaults['font_family'], 'Arial', false),
-            selected($defaults['font_family'], 'Helvetica', false),
-            selected($defaults['font_family'], 'Times New Roman', false),
-            selected($defaults['font_family'], 'Georgia', false),
-            selected($defaults['font_family'], 'Verdana', false)
-        );
-
-        // Font Size
-        printf(
-            '<div class="wp-field-typography-item">
-                <label>Font Size</label>
-                <input type="number" name="%s[font_size]" value="%s" min="8" max="72" placeholder="16">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['font_size'])
-        );
-
-        // Font Weight
-        printf(
-            '<div class="wp-field-typography-item">
-                <label>Font Weight</label>
-                <select name="%s[font_weight]">
-                    <option value="">Default</option>
-                    <option value="300" %s>Light (300)</option>
-                    <option value="400" %s>Normal (400)</option>
-                    <option value="600" %s>Semi Bold (600)</option>
-                    <option value="700" %s>Bold (700)</option>
-                </select>
-            </div>',
-            esc_attr($name),
-            selected($defaults['font_weight'], '300', false),
-            selected($defaults['font_weight'], '400', false),
-            selected($defaults['font_weight'], '600', false),
-            selected($defaults['font_weight'], '700', false)
-        );
-
-        // Line Height
-        printf(
-            '<div class="wp-field-typography-item">
-                <label>Line Height</label>
-                <input type="number" name="%s[line_height]" value="%s" min="1" max="3" step="0.1" placeholder="1.5">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['line_height'])
-        );
-
-        // Text Align
-        printf(
-            '<div class="wp-field-typography-item">
-                <label>Text Align</label>
-                <select name="%s[text_align]">
-                    <option value="">Default</option>
-                    <option value="left" %s>Left</option>
-                    <option value="center" %s>Center</option>
-                    <option value="right" %s>Right</option>
-                    <option value="justify" %s>Justify</option>
-                </select>
-            </div>',
-            esc_attr($name),
-            selected($defaults['text_align'], 'left', false),
-            selected($defaults['text_align'], 'center', false),
-            selected($defaults['text_align'], 'right', false),
-            selected($defaults['text_align'], 'justify', false)
-        );
-
-        // Text Transform
-        printf(
-            '<div class="wp-field-typography-item">
-                <label>Text Transform</label>
-                <select name="%s[text_transform]">
-                    <option value="">Default</option>
-                    <option value="none" %s>None</option>
-                    <option value="uppercase" %s>Uppercase</option>
-                    <option value="lowercase" %s>Lowercase</option>
-                    <option value="capitalize" %s>Capitalize</option>
-                </select>
-            </div>',
-            esc_attr($name),
-            selected($defaults['text_transform'], 'none', false),
-            selected($defaults['text_transform'], 'uppercase', false),
-            selected($defaults['text_transform'], 'lowercase', false),
-            selected($defaults['text_transform'], 'capitalize', false)
-        );
-
-        // Color
-        printf(
-            '<div class="wp-field-typography-item">
-                <label>Color</label>
-                <input type="text" name="%s[color]" value="%s" class="wp-color-picker-field">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['color'])
-        );
-
-        echo '</div>';
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер spacing (отступы)
-     */
-    private function render_spacing(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = (array)$this->get_field_value($field);
-        $name = $field['name'] ?? $field['id'];
-        $type = $field['spacing_type'] ?? 'margin'; // margin или padding
-
-        $defaults = [
-            'top' => $value['top'] ?? '',
-            'right' => $value['right'] ?? '',
-            'bottom' => $value['bottom'] ?? '',
-            'left' => $value['left'] ?? '',
-            'unit' => $value['unit'] ?? 'px',
-        ];
-
-        echo '<div class="wp-field-spacing">';
-        echo '<div class="wp-field-spacing-wrapper">';
-        echo '<div class="wp-field-spacing-visual">';
-
-        // Top
-        printf(
-            '<div class="wp-field-spacing-side wp-field-spacing-top">
-                <label>Top</label>
-                <input type="number" name="%s[top]" value="%s" placeholder="0" step="1">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['top'])
-        );
-
-        // Right
-        printf(
-            '<div class="wp-field-spacing-side wp-field-spacing-right">
-                <label>Right</label>
-                <input type="number" name="%s[right]" value="%s" placeholder="0" step="1">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['right'])
-        );
-
-        // Bottom
-        printf(
-            '<div class="wp-field-spacing-side wp-field-spacing-bottom">
-                <label>Bottom</label>
-                <input type="number" name="%s[bottom]" value="%s" placeholder="0" step="1">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['bottom'])
-        );
-
-        // Left
-        printf(
-            '<div class="wp-field-spacing-side wp-field-spacing-left">
-                <label>Left</label>
-                <input type="number" name="%s[left]" value="%s" placeholder="0" step="1">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['left'])
-        );
-
-        // Center label
-        echo '<div class="wp-field-spacing-center">' . esc_html($type) . '</div>';
-
-        echo '</div>'; // .wp-field-spacing-visual
-
-        // Unit selector
-        printf(
-            '<div class="wp-field-spacing-unit">
-                <select name="%s[unit]">
-                    <option value="px" %s>px</option>
-                    <option value="em" %s>em</option>
-                    <option value="rem" %s>rem</option>
-                    <option value="%%" %s>%%</option>
-                </select>
-            </div>',
-            esc_attr($name),
-            selected($defaults['unit'], 'px', false),
-            selected($defaults['unit'], 'em', false),
-            selected($defaults['unit'], 'rem', false),
-            selected($defaults['unit'], '%', false)
-        );
-
-        echo '</div>'; // .wp-field-spacing-wrapper
-        echo '</div>'; // .wp-field-spacing
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер dimensions (размеры)
-     */
-    private function render_dimensions(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = (array)$this->get_field_value($field);
-        $name = $field['name'] ?? $field['id'];
-
-        $defaults = [
-            'width' => $value['width'] ?? '',
-            'height' => $value['height'] ?? '',
-            'unit' => $value['unit'] ?? 'px',
-        ];
-
-        echo '<div class="wp-field-dimensions">';
-
-        // Width
-        printf(
-            '<div class="wp-field-dimensions-item">
-                <label>Width</label>
-                <input type="number" name="%s[width]" value="%s" placeholder="0">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['width'])
-        );
-
-        // Height
-        printf(
-            '<div class="wp-field-dimensions-item">
-                <label>Height</label>
-                <input type="number" name="%s[height]" value="%s" placeholder="0">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['height'])
-        );
-
-        // Unit
-        printf(
-            '<div class="wp-field-dimensions-item">
-                <label>Unit</label>
-                <select name="%s[unit]">
-                    <option value="px" %s>px</option>
-                    <option value="em" %s>em</option>
-                    <option value="rem" %s>rem</option>
-                    <option value="%%" %s>%%</option>
-                    <option value="vh" %s>vh</option>
-                    <option value="vw" %s>vw</option>
-                </select>
-            </div>',
-            esc_attr($name),
-            selected($defaults['unit'], 'px', false),
-            selected($defaults['unit'], 'em', false),
-            selected($defaults['unit'], 'rem', false),
-            selected($defaults['unit'], '%', false),
-            selected($defaults['unit'], 'vh', false),
-            selected($defaults['unit'], 'vw', false)
-        );
-
-        echo '</div>';
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер border (граница)
-     */
-    private function render_border(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = (array)$this->get_field_value($field);
-        $name = $field['name'] ?? $field['id'];
-
-        $defaults = [
-            'style' => $value['style'] ?? 'solid',
-            'width' => $value['width'] ?? '',
-            'color' => $value['color'] ?? '',
-        ];
-
-        echo '<div class="wp-field-border">';
-
-        // Style
-        printf(
-            '<div class="wp-field-border-item">
-                <label>Style</label>
-                <select name="%s[style]">
-                    <option value="none" %s>None</option>
-                    <option value="solid" %s>Solid</option>
-                    <option value="dashed" %s>Dashed</option>
-                    <option value="dotted" %s>Dotted</option>
-                    <option value="double" %s>Double</option>
-                </select>
-            </div>',
-            esc_attr($name),
-            selected($defaults['style'], 'none', false),
-            selected($defaults['style'], 'solid', false),
-            selected($defaults['style'], 'dashed', false),
-            selected($defaults['style'], 'dotted', false),
-            selected($defaults['style'], 'double', false)
-        );
-
-        // Width
-        printf(
-            '<div class="wp-field-border-item">
-                <label>Width (px)</label>
-                <input type="number" name="%s[width]" value="%s" min="0" max="20" placeholder="1">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['width'])
-        );
-
-        // Color
-        printf(
-            '<div class="wp-field-border-item">
-                <label>Color</label>
-                <input type="text" name="%s[color]" value="%s" class="wp-color-picker-field">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['color'])
-        );
-
-        echo '</div>';
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер background (фон)
-     */
-    private function render_background(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = (array)$this->get_field_value($field);
-        $name = $field['name'] ?? $field['id'];
-
-        $defaults = [
-            'color' => $value['color'] ?? '',
-            'image' => $value['image'] ?? '',
-            'position' => $value['position'] ?? 'center center',
-            'size' => $value['size'] ?? 'cover',
-            'repeat' => $value['repeat'] ?? 'no-repeat',
-            'attachment' => $value['attachment'] ?? 'scroll',
-        ];
-
-        echo '<div class="wp-field-background">';
-
-        // Color
-        printf(
-            '<div class="wp-field-background-item">
-                <label>Background Color</label>
-                <input type="text" name="%s[color]" value="%s" class="wp-color-picker-field">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['color'])
-        );
-
-        // Image
-        printf(
-            '<div class="wp-field-background-item">
-                <label>Background Image</label>
-                <input type="hidden" name="%s[image]" value="%s" class="wp-field-background-image-id">
-                <button type="button" class="button wp-field-background-image-button" data-field-name="%s">Choose Image</button>
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['image']),
-            esc_attr($name)
-        );
-
-        // Position
-        printf(
-            '<div class="wp-field-background-item">
-                <label>Position</label>
-                <select name="%s[position]">
-                    <option value="left top" %s>Left Top</option>
-                    <option value="center top" %s>Center Top</option>
-                    <option value="right top" %s>Right Top</option>
-                    <option value="left center" %s>Left Center</option>
-                    <option value="center center" %s>Center Center</option>
-                    <option value="right center" %s>Right Center</option>
-                    <option value="left bottom" %s>Left Bottom</option>
-                    <option value="center bottom" %s>Center Bottom</option>
-                    <option value="right bottom" %s>Right Bottom</option>
-                </select>
-            </div>',
-            esc_attr($name),
-            selected($defaults['position'], 'left top', false),
-            selected($defaults['position'], 'center top', false),
-            selected($defaults['position'], 'right top', false),
-            selected($defaults['position'], 'left center', false),
-            selected($defaults['position'], 'center center', false),
-            selected($defaults['position'], 'right center', false),
-            selected($defaults['position'], 'left bottom', false),
-            selected($defaults['position'], 'center bottom', false),
-            selected($defaults['position'], 'right bottom', false)
-        );
-
-        // Size
-        printf(
-            '<div class="wp-field-background-item">
-                <label>Size</label>
-                <select name="%s[size]">
-                    <option value="auto" %s>Auto</option>
-                    <option value="cover" %s>Cover</option>
-                    <option value="contain" %s>Contain</option>
-                </select>
-            </div>',
-            esc_attr($name),
-            selected($defaults['size'], 'auto', false),
-            selected($defaults['size'], 'cover', false),
-            selected($defaults['size'], 'contain', false)
-        );
-
-        // Repeat
-        printf(
-            '<div class="wp-field-background-item">
-                <label>Repeat</label>
-                <select name="%s[repeat]">
-                    <option value="no-repeat" %s>No Repeat</option>
-                    <option value="repeat" %s>Repeat</option>
-                    <option value="repeat-x" %s>Repeat X</option>
-                    <option value="repeat-y" %s>Repeat Y</option>
-                </select>
-            </div>',
-            esc_attr($name),
-            selected($defaults['repeat'], 'no-repeat', false),
-            selected($defaults['repeat'], 'repeat', false),
-            selected($defaults['repeat'], 'repeat-x', false),
-            selected($defaults['repeat'], 'repeat-y', false)
-        );
-
-        // Attachment
-        printf(
-            '<div class="wp-field-background-item">
-                <label>Attachment</label>
-                <select name="%s[attachment]">
-                    <option value="scroll" %s>Scroll</option>
-                    <option value="fixed" %s>Fixed</option>
-                </select>
-            </div>',
-            esc_attr($name),
-            selected($defaults['attachment'], 'scroll', false),
-            selected($defaults['attachment'], 'fixed', false)
-        );
-
-        echo '</div>';
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер link_color (цвета ссылок)
-     */
-    private function render_link_color(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = (array)$this->get_field_value($field);
-        $name = $field['name'] ?? $field['id'];
-
-        $defaults = [
-            'normal' => $value['normal'] ?? '',
-            'hover' => $value['hover'] ?? '',
-            'active' => $value['active'] ?? '',
-        ];
-
-        echo '<div class="wp-field-link-color">';
-
-        // Normal
-        printf(
-            '<div class="wp-field-link-color-item">
-                <label>Normal</label>
-                <input type="text" name="%s[normal]" value="%s" class="wp-color-picker-field">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['normal'])
-        );
-
-        // Hover
-        printf(
-            '<div class="wp-field-link-color-item">
-                <label>Hover</label>
-                <input type="text" name="%s[hover]" value="%s" class="wp-color-picker-field">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['hover'])
-        );
-
-        // Active
-        printf(
-            '<div class="wp-field-link-color-item">
-                <label>Active</label>
-                <input type="text" name="%s[active]" value="%s" class="wp-color-picker-field">
-            </div>',
-            esc_attr($name),
-            esc_attr($defaults['active'])
-        );
-
-        echo '</div>';
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер color_group (группа цветов)
-     */
-    private function render_color_group(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = (array)$this->get_field_value($field);
-        $name = $field['name'] ?? $field['id'];
-        $colors = $field['colors'] ?? ['primary' => 'Primary', 'secondary' => 'Secondary', 'accent' => 'Accent'];
-
-        echo '<div class="wp-field-color-group">';
-
-        foreach ($colors as $key => $label) {
-            printf(
-                '<div class="wp-field-color-group-item">
-                    <label>%s</label>
-                    <input type="text" name="%s[%s]" value="%s" class="wp-color-picker-field">
-                </div>',
-                esc_html($label),
-                esc_attr($name),
-                esc_attr($key),
-                esc_attr($value[$key] ?? '')
-            );
-        }
-
-        echo '</div>';
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер image_select (выбор из изображений)
-     */
-    private function render_image_select(array $field): void
-    {
-        $this->render_label($field);
-
-        $options = $field['options'] ?? [];
-        $value = $this->get_field_value($field);
-        $name = $field['name'] ?? $field['id'];
-
-        if (empty($options)) {
-            echo '<p class="description">No options provided</p>';
-            return;
-        }
-
-        echo '<div class="wp-field-image-select">';
-
-        foreach ($options as $key => $option) {
-            $img_src = is_array($option) ? ($option['src'] ?? '') : $option;
-            $img_label = is_array($option) ? ($option['label'] ?? $key) : $key;
-            $checked = $value === $key ? 'checked' : '';
-
-            printf(
-                '<label class="wp-field-image-select-item %s">
-                    <input type="radio" name="%s" value="%s" %s>
-                    <img src="%s" alt="%s">
-                    <span>%s</span>
-                </label>',
-                $checked ? 'selected' : '',
-                esc_attr($name),
-                esc_attr($key),
-                $checked,
-                esc_url($img_src),
-                esc_attr($img_label),
-                esc_html($img_label)
-            );
-        }
-
-        echo '</div>';
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер code_editor (редактор кода с подсветкой синтаксиса)
-     */
-    private function render_code_editor(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = $this->get_field_value($field);
-        $mode = $field['mode'] ?? 'css';
-        $height = $field['height'] ?? '300px';
-        $name = $field['name'] ?? $field['id'];
-
-        // Подключаем wp_enqueue_code_editor
-        if (function_exists('wp_enqueue_code_editor')) {
-            wp_enqueue_code_editor(['type' => $mode]);
-        }
-
-        printf(
-            '<textarea id="%s" name="%s" class="wp-field-code-editor" data-mode="%s" style="height:%s;width:100%%;">%s</textarea>',
-            esc_attr($field['id']),
-            esc_attr($name),
-            esc_attr($mode),
-            esc_attr($height),
-            esc_textarea($value)
-        );
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер icon (выбор иконки)
-     */
-    private function render_icon(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = $this->get_field_value($field);
-        $library = $field['library'] ?? 'dashicons';
-        $name = $field['name'] ?? $field['id'];
-
-        echo '<div class="wp-field-icon-picker">';
-
-        printf(
-            '<input type="hidden" name="%s" value="%s" class="wp-field-icon-value" />',
-            esc_attr($name),
-            esc_attr($value)
-        );
-
-        echo '<button type="button" class="button wp-field-icon-button">';
-        if ($value) {
-            printf('<span class="%s %s"></span> %s', esc_attr($library), esc_attr($value), esc_html($value));
-        } else {
-            echo esc_html__('Select Icon', 'wp-field');
-        }
-        echo '</button>';
-
-        // Modal с иконками
-        echo '<div class="wp-field-icon-modal" style="display:none;">';
-        echo '<div class="wp-field-icon-modal-header">';
-        echo '<input type="text" class="wp-field-icon-search" placeholder="' . esc_attr__('Search icons...', 'wp-field') . '">';
-        echo '<button type="button" class="button wp-field-icon-close">×</button>';
-        echo '</div>';
-        echo '<div class="wp-field-icon-grid">';
-
-        $custom_icons = $field['icons'] ?? null;
-        $icons = $this->get_icon_library($library, $custom_icons);
-        foreach ($icons as $icon) {
-            printf(
-                '<span class="%s %s" data-icon="%s" title="%s"></span>',
-                esc_attr($library),
-                esc_attr($icon),
-                esc_attr($icon),
-                esc_attr($icon)
-            );
-        }
-
-        echo '</div></div></div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Получить список иконок библиотеки
-     */
-    private function get_icon_library(string $library, ?array $custom_icons = null): array
-    {
-        // Если переданы кастомные иконки, используем их
-        if (!empty($custom_icons)) {
-            return $custom_icons;
-        }
-
-        if ($library === 'dashicons') {
-            return [
-                'dashicons-admin-site', 'dashicons-dashboard', 'dashicons-admin-post', 'dashicons-admin-media',
-                'dashicons-admin-links', 'dashicons-admin-page', 'dashicons-admin-comments', 'dashicons-admin-appearance',
-                'dashicons-admin-plugins', 'dashicons-admin-users', 'dashicons-admin-tools', 'dashicons-admin-settings',
-                'dashicons-admin-network', 'dashicons-admin-home', 'dashicons-admin-generic', 'dashicons-admin-collapse',
-                'dashicons-filter', 'dashicons-admin-customizer', 'dashicons-admin-multisite', 'dashicons-welcome-write-blog',
-                'dashicons-welcome-add-page', 'dashicons-welcome-view-site', 'dashicons-welcome-widgets-menus', 'dashicons-welcome-comments',
-                'dashicons-welcome-learn-more', 'dashicons-format-aside', 'dashicons-format-image', 'dashicons-format-gallery',
-                'dashicons-format-video', 'dashicons-format-status', 'dashicons-format-quote', 'dashicons-format-chat',
-                'dashicons-format-audio', 'dashicons-camera', 'dashicons-images-alt', 'dashicons-images-alt2',
-                'dashicons-video-alt', 'dashicons-video-alt2', 'dashicons-video-alt3', 'dashicons-media-archive',
-                'dashicons-media-audio', 'dashicons-media-code', 'dashicons-media-default', 'dashicons-media-document',
-                'dashicons-media-interactive', 'dashicons-media-spreadsheet', 'dashicons-media-text', 'dashicons-media-video',
-                'dashicons-playlist-audio', 'dashicons-playlist-video', 'dashicons-controls-play', 'dashicons-controls-pause',
-            ];
-        }
-
-        return apply_filters('wp_field_icon_library', [], $library);
-    }
-
-    /**
-     * Рендер map (карта Google Maps)
-     */
-    private function render_map(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = $this->get_field_value($field);
-        $value = is_array($value) ? $value : ['lat' => '', 'lng' => ''];
-        $api_key = $field['api_key'] ?? '';
-        $name = $field['name'] ?? $field['id'];
-
-        if (empty($api_key)) {
-            echo '<p class="description">' . esc_html__('Google Maps API key required', 'wp-field') . '</p>';
-            $this->render_description($field);
-            return;
-        }
-
-        // Подключаем Google Maps API
-        wp_enqueue_script(
-            'google-maps-api',
-            'https://maps.googleapis.com/maps/api/js?key=' . urlencode($api_key),
-            [],
-            null,
-            true
-        );
-
-        echo '<div class="wp-field-map-wrapper">';
-
-        printf(
-            '<input type="hidden" name="%s[lat]" value="%s" class="wp-field-map-lat" />',
-            esc_attr($name),
-            esc_attr($value['lat'])
-        );
-
-        printf(
-            '<input type="hidden" name="%s[lng]" value="%s" class="wp-field-map-lng" />',
-            esc_attr($name),
-            esc_attr($value['lng'])
-        );
-
-        printf(
-            '<div class="wp-field-map" data-zoom="%d" data-center-lat="%s" data-center-lng="%s" style="height:400px;width:100%%;"></div>',
-            absint($field['zoom'] ?? 12),
-            esc_attr($field['center']['lat'] ?? '55.7558'),
-            esc_attr($field['center']['lng'] ?? '37.6173')
-        );
-
-        echo '</div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер sortable (сортируемый список)
-     */
-    private function render_sortable(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = $this->get_field_value($field);
-        $value = is_array($value) ? $value : [];
-        $options = $field['options'] ?? [];
-        $name = $field['name'] ?? $field['id'];
-
-        if (empty($options)) {
-            echo '<p class="description">' . esc_html__('No options provided', 'wp-field') . '</p>';
-            return;
-        }
-
-        // Сортируем опции по сохранённому порядку
-        $sorted = [];
-        foreach ($value as $key) {
-            if (isset($options[$key])) {
-                $sorted[$key] = $options[$key];
-            }
-        }
-
-        // Добавляем оставшиеся
-        foreach ($options as $key => $label) {
-            if (!isset($sorted[$key])) {
-                $sorted[$key] = $label;
-            }
-        }
-
-        echo '<ul class="wp-field-sortable">';
-
-        foreach ($sorted as $key => $label) {
-            printf(
-                '<li data-value="%s">
-                    <span class="dashicons dashicons-menu"></span>
-                    <span>%s</span>
-                    <input type="hidden" name="%s[]" value="%s" />
-                </li>',
-                esc_attr($key),
-                esc_html($label),
-                esc_attr($name),
-                esc_attr($key)
-            );
-        }
-
-        echo '</ul>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер sorter (сортировщик с enabled/disabled)
-     */
-    private function render_sorter(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = $this->get_field_value($field);
-        $value = is_array($value) ? $value : ['enabled' => [], 'disabled' => []];
-        $options = $field['options'] ?? [];
-        $name = $field['name'] ?? $field['id'];
-
-        if (empty($options)) {
-            echo '<p class="description">' . esc_html__('No options provided', 'wp-field') . '</p>';
-            return;
-        }
-
-        $enabled = $value['enabled'] ?? [];
-        $disabled = $value['disabled'] ?? [];
-
-        // Распределяем опции
-        $enabled_items = [];
-        $disabled_items = [];
-
-        foreach ($enabled as $key) {
-            if (isset($options[$key])) {
-                $enabled_items[$key] = $options[$key];
-            }
-        }
-
-        foreach ($options as $key => $label) {
-            if (!isset($enabled_items[$key])) {
-                $disabled_items[$key] = $label;
-            }
-        }
-
-        echo '<div class="wp-field-sorter">';
-
-        // Enabled
-        echo '<div class="wp-field-sorter-column">';
-        echo '<h4>' . esc_html__('Enabled', 'wp-field') . '</h4>';
-        echo '<ul class="wp-field-sorter-list" data-type="enabled">';
-
-        foreach ($enabled_items as $key => $label) {
-            printf(
-                '<li data-value="%s">
-                    <span class="dashicons dashicons-menu"></span>
-                    <span>%s</span>
-                    <input type="hidden" name="%s[enabled][]" value="%s" />
-                </li>',
-                esc_attr($key),
-                esc_html($label),
-                esc_attr($name),
-                esc_attr($key)
-            );
-        }
-
-        echo '</ul></div>';
-
-        // Disabled
-        echo '<div class="wp-field-sorter-column">';
-        echo '<h4>' . esc_html__('Disabled', 'wp-field') . '</h4>';
-        echo '<ul class="wp-field-sorter-list" data-type="disabled">';
-
-        foreach ($disabled_items as $key => $label) {
-            printf(
-                '<li data-value="%s">
-                    <span class="dashicons dashicons-menu"></span>
-                    <span>%s</span>
-                    <input type="hidden" name="%s[disabled][]" value="%s" />
-                </li>',
-                esc_attr($key),
-                esc_html($label),
-                esc_attr($name),
-                esc_attr($key)
-            );
-        }
-
-        echo '</ul></div></div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер palette (палитра цветов)
-     */
-    private function render_palette(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = $this->get_field_value($field);
-        $palettes = $field['palettes'] ?? [];
-        $name = $field['name'] ?? $field['id'];
-
-        if (empty($palettes)) {
-            echo '<p class="description">' . esc_html__('No palettes provided', 'wp-field') . '</p>';
-            return;
-        }
-
-        echo '<div class="wp-field-palette">';
-
-        foreach ($palettes as $key => $palette) {
-            $colors = is_array($palette) ? $palette : [$palette];
-            $checked = $value === $key ? 'checked' : '';
-
-            printf(
-                '<label class="wp-field-palette-item %s">
-                    <input type="radio" name="%s" value="%s" %s>
-                    <div class="wp-field-palette-colors">',
-                $checked ? 'selected' : '',
-                esc_attr($name),
-                esc_attr($key),
-                $checked
-            );
-
-            foreach ($colors as $color) {
-                printf(
-                    '<span class="wp-field-palette-color" style="background-color:%s;"></span>',
-                    esc_attr($color)
-                );
-            }
-
-            echo '</div></label>';
-        }
-
-        echo '</div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер link (поле ссылки с URL и target)
-     */
-    private function render_link(array $field): void
-    {
-        $this->render_label($field);
-
-        $value = $this->get_field_value($field);
-        $value = is_array($value) ? $value : ['url' => '', 'text' => '', 'target' => '_self'];
-        $name = $field['name'] ?? $field['id'];
-
-        echo '<div class="wp-field-link">';
-
-        // URL
-        printf(
-            '<div class="wp-field-link-item">
-                <label>%s</label>
-                <input type="url" name="%s[url]" value="%s" placeholder="https://" class="regular-text">
-            </div>',
-            esc_html__('URL', 'wp-field'),
-            esc_attr($name),
-            esc_attr($value['url'])
-        );
-
-        // Text
-        printf(
-            '<div class="wp-field-link-item">
-                <label>%s</label>
-                <input type="text" name="%s[text]" value="%s" placeholder="%s" class="regular-text">
-            </div>',
-            esc_html__('Link Text', 'wp-field'),
-            esc_attr($name),
-            esc_attr($value['text']),
-            esc_attr__('Click here', 'wp-field')
-        );
-
-        // Target
-        printf(
-            '<div class="wp-field-link-item">
-                <label>%s</label>
-                <select name="%s[target]">
-                    <option value="_self" %s>%s</option>
-                    <option value="_blank" %s>%s</option>
-                </select>
-            </div>',
-            esc_html__('Target', 'wp-field'),
-            esc_attr($name),
-            selected($value['target'], '_self', false),
-            esc_html__('Same window', 'wp-field'),
-            selected($value['target'], '_blank', false),
-            esc_html__('New window', 'wp-field')
-        );
-
-        echo '</div>';
-
-        $this->render_description($field);
-    }
-
-    /**
-     * Рендер backup (экспорт/импорт настроек)
-     */
-    private function render_backup(array $field): void
-    {
-        $this->render_label($field);
-
-        $name = $field['name'] ?? $field['id'];
-        $export_data = $field['export_data'] ?? [];
-
-        echo '<div class="wp-field-backup">';
-
-        // Export
-        echo '<div class="wp-field-backup-section">';
-        echo '<h4>' . esc_html__('Export Settings', 'wp-field') . '</h4>';
-
-        if (!empty($export_data)) {
-            $json_data = wp_json_encode($export_data, JSON_PRETTY_PRINT);
-            printf(
-                '<textarea readonly class="wp-field-backup-export" rows="10" style="width:100%%;">%s</textarea>',
-                esc_textarea($json_data)
-            );
-            echo '<button type="button" class="button wp-field-backup-copy">' . esc_html__('Copy to Clipboard', 'wp-field') . '</button>';
-            echo '<button type="button" class="button wp-field-backup-download">' . esc_html__('Download JSON', 'wp-field') . '</button>';
-        } else {
-            echo '<p class="description">' . esc_html__('No data to export', 'wp-field') . '</p>';
-        }
-
-        echo '</div>';
-
-        // Import
-        echo '<div class="wp-field-backup-section">';
-        echo '<h4>' . esc_html__('Import Settings', 'wp-field') . '</h4>';
-
-        printf(
-            '<textarea name="%s" class="wp-field-backup-import" rows="10" placeholder="%s" style="width:100%%;"></textarea>',
-            esc_attr($name),
-            esc_attr__('Paste JSON data here...', 'wp-field')
-        );
-
-        echo '<button type="button" class="button button-primary wp-field-backup-validate">' . esc_html__('Validate JSON', 'wp-field') . '</button>';
-        echo '<div class="wp-field-backup-status"></div>';
-
-        echo '</div></div>';
 
         $this->render_description($field);
     }
@@ -2544,25 +294,12 @@ class WP_Field
      */
     private function render_label(array $field): void
     {
-        if (!empty($field['label'])) {
+        if (! empty($field['label'])) {
             printf(
                 '<label for="%s" class="%s">%s</label>',
                 esc_attr($field['id']),
                 esc_attr($field['label-class'] ?? 'input-label'),
-                esc_html($field['label'])
-            );
-        }
-    }
-
-    /**
-     * Рендер description
-     */
-    private function render_description(array $field): void
-    {
-        if (!empty($field['desc'])) {
-            printf(
-                '<p class="description">%s</p>',
-                wp_kses_post($field['desc'])
+                esc_html($field['label']),
             );
         }
     }
@@ -2588,66 +325,10 @@ class WP_Field
     }
 
     /**
-     * Проверить, выбрано ли значение
-     */
-    private function is_value_selected($current_value, $compare_value): bool
-    {
-        if (is_array($current_value)) {
-            // Для массива проверяем и строгое, и нестрогое сравнение (для совместимости с числовыми ключами)
-            return in_array($compare_value, $current_value, true) || in_array((string)$compare_value, $current_value, true);
-        }
-
-        // Приводим к строке для корректного сравнения (избегаем 0 == '' = true)
-        return (string)$current_value === (string)$compare_value;
-    }
-
-    /**
-     * Проверить, отмечен ли checkbox
-     */
-    private function is_checked($value): bool
-    {
-        return $value === '1' || $value === 'on' || $value === 'yes' || $value === true;
-    }
-
-    /**
-     * Получить HTML атрибутов поля
-     */
-    private function get_field_attributes(array $field): string
-    {
-        $attributes = [];
-
-        if (!empty($field['custom_attributes']) && is_array($field['custom_attributes'])) {
-            foreach ($field['custom_attributes'] as $attr => $val) {
-                $attributes[] = esc_attr($attr) . '="' . esc_attr($val) . '"';
-            }
-        }
-
-        return implode(' ', $attributes);
-    }
-
-    /**
-     * Получить readonly/disabled атрибуты
-     */
-    private function get_readonly_disabled(array $field): string
-    {
-        $attrs = [];
-
-        if (!empty($field['readonly'])) {
-            $attrs[] = 'readonly';
-        }
-
-        if (!empty($field['disabled'])) {
-            $attrs[] = 'disabled';
-        }
-
-        return implode(' ', $attrs);
-    }
-
-    /**
      * Получить значение поля из БД по типу хранилища
      *
-     * @param string $key - option|meta name
-     * @param int $id - object ID
+     * @param  string  $key  - option|meta name
+     * @param  int  $id  - object ID
      */
     public function get_value(string $key, $id = null)
     {
@@ -2693,15 +374,13 @@ class WP_Field
     /**
      * Получить значение из пользовательской таблицы
      *
-     * @param string $key
-     * @param int $id
      * @return mixed
      */
     private function get_custom_table_value(string $key, int $id)
     {
         global $wpdb;
 
-        $table_name = $this->field['table'] ?? $wpdb->prefix . 'custom_meta';
+        $table_name = $this->field['table'] ?? $wpdb->prefix.'custom_meta';
         $object_id_column = $this->field['object_id_column'] ?? 'object_id';
         $meta_key_column = $this->field['meta_key_column'] ?? 'meta_key';
         $meta_value_column = $this->field['meta_value_column'] ?? 'meta_value';
@@ -2709,7 +388,2337 @@ class WP_Field
         return $wpdb->get_var($wpdb->prepare(
             "SELECT {$meta_value_column} FROM {$table_name} WHERE {$object_id_column} = %d AND {$meta_key_column} = %s",
             $id,
-            $key
+            $key,
         ));
+    }
+
+    /**
+     * Получить HTML атрибутов поля
+     */
+    private function get_field_attributes(array $field): string
+    {
+        $attributes = [];
+
+        if (! empty($field['custom_attributes']) && is_array($field['custom_attributes'])) {
+            foreach ($field['custom_attributes'] as $attr => $val) {
+                $attributes[] = esc_attr($attr).'="'.esc_attr($val).'"';
+            }
+        }
+
+        return implode(' ', $attributes);
+    }
+
+    /**
+     * Получить readonly/disabled атрибуты
+     */
+    private function get_readonly_disabled(array $field): string
+    {
+        $attrs = [];
+
+        if (! empty($field['readonly'])) {
+            $attrs[] = 'readonly';
+        }
+
+        if (! empty($field['disabled'])) {
+            $attrs[] = 'disabled';
+        }
+
+        return implode(' ', $attrs);
+    }
+
+    /**
+     * Рендер description
+     */
+    private function render_description(array $field): void
+    {
+        if (! empty($field['desc'])) {
+            printf(
+                '<p class="description">%s</p>',
+                wp_kses_post($field['desc']),
+            );
+        }
+    }
+
+    /**
+     * Рендер числового поля
+     */
+    private function render_number(array $field): void
+    {
+        $this->render_label($field);
+
+        printf(
+            '<input class="%s" id="%s" name="%s" type="number" value="%s" %s %s %s %s>',
+            esc_attr($field['class'] ?? 'regular-text'),
+            esc_attr($field['id']),
+            esc_attr($field['name'] ?? $field['id']),
+            esc_attr($this->get_field_value($field)),
+            isset($field['min']) ? 'min="'.esc_attr($field['min']).'"' : '',
+            isset($field['max']) ? 'max="'.esc_attr($field['max']).'"' : '',
+            isset($field['step']) ? 'step="'.esc_attr($field['step']).'"' : '',
+            $this->get_field_attributes($field),
+            $this->get_readonly_disabled($field),
+        );
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер textarea
+     */
+    private function render_textarea(array $field): void
+    {
+        $this->render_label($field);
+
+        printf(
+            '<textarea class="%s" id="%s" name="%s" rows="%d" %s %s>%s</textarea>',
+            esc_attr($field['class'] ?? 'regular-text'),
+            esc_attr($field['id']),
+            esc_attr($field['name'] ?? $field['id']),
+            absint($field['rows'] ?? 5),
+            $this->get_field_attributes($field),
+            $this->get_readonly_disabled($field),
+            esc_textarea($this->get_field_value($field)),
+        );
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер select
+     */
+    private function render_select(array $field): void
+    {
+        $this->render_label($field);
+
+        $multiple = ! empty($field['multiple']) ? ' multiple="multiple"' : '';
+
+        // Для multiselect добавляем [] к имени, чтобы PHP получил массив значений
+        $name = $field['name'] ?? $field['id'];
+        if (! empty($field['multiple']) && ! str_ends_with($name, '[]')) {
+            $name .= '[]';
+        }
+
+        printf(
+            '<select class="%s" id="%s" name="%s"%s %s>%s</select>',
+            esc_attr($field['class'] ?? ''),
+            esc_attr($field['id']),
+            esc_attr($name),
+            $multiple,
+            $this->get_field_attributes($field),
+            $this->render_select_options($field),
+        );
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер опций select
+     */
+    private function render_select_options(array $field): string
+    {
+        $options = $field['options'] ?? [];
+        $value = $this->get_field_value($field);
+
+        if (is_string($options)) {
+            $options = array_filter(array_map('trim', explode("\n", $options)));
+        }
+
+        $output = [];
+
+        foreach ($options as $opt_value => $opt_label) {
+            // Поддержка parse_options: "label:value"
+            if (! empty($field['parse_options']) && is_string($opt_label) && str_contains($opt_label, ':')) {
+                [$opt_label, $opt_value] = array_map('trim', explode(':', $opt_label, 2));
+            }
+
+            $selected = $this->is_value_selected($value, $opt_value) ? ' selected' : '';
+
+            $output[] = sprintf(
+                '<option value="%s"%s>%s</option>',
+                esc_attr($opt_value),
+                $selected,
+                esc_html($opt_label),
+            );
+        }
+
+        return implode('', $output);
+    }
+
+    /**
+     * Проверить, выбрано ли значение
+     */
+    private function is_value_selected($current_value, $compare_value): bool
+    {
+        if (is_array($current_value)) {
+            // Для массива проверяем и строгое, и нестрогое сравнение (для совместимости с числовыми ключами)
+            return in_array($compare_value, $current_value, true) || in_array((string) $compare_value, $current_value, true);
+        }
+
+        // Приводим к строке для корректного сравнения (избегаем 0 == '' = true)
+        return (string) $current_value === (string) $compare_value;
+    }
+
+    /**
+     * Рендер radio
+     */
+    private function render_radio(array $field): void
+    {
+        $this->render_label($field);
+
+        $options = $field['options'] ?? [];
+        $value = $this->get_field_value($field);
+
+        if (is_string($options)) {
+            $options = array_filter(array_map('trim', explode("\n", $options)));
+        }
+
+        $output = [];
+        $i = 0;
+
+        foreach ($options as $opt_value => $opt_label) {
+            $checked = $this->is_value_selected($value, $opt_value) ? ' checked' : '';
+
+            $output[] = sprintf(
+                '<label><input type="radio" name="%s" value="%s" id="%s-%d"%s> %s</label>',
+                esc_attr($field['name'] ?? $field['id']),
+                esc_attr($opt_value),
+                esc_attr($field['id']),
+                $i,
+                $checked,
+                esc_html($opt_label),
+            );
+
+            $i++;
+        }
+
+        echo '<div class="wp-field-radio-group">'.implode('', $output).'</div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер одиночного checkbox
+     */
+    private function render_checkbox(array $field): void
+    {
+        $value = $this->get_field_value($field);
+        $checked = $this->is_checked($value) ? ' checked' : '';
+
+        printf(
+            '<input type="checkbox" id="%s" name="%s" value="1"%s %s>',
+            esc_attr($field['id']),
+            esc_attr($field['name'] ?? $field['id']),
+            $checked,
+            $this->get_field_attributes($field),
+        );
+
+        $this->render_label($field);
+        $this->render_description($field);
+    }
+
+    /**
+     * Проверить, отмечен ли checkbox
+     */
+    private function is_checked($value): bool
+    {
+        return $value === '1' || $value === 'on' || $value === 'yes' || $value === true;
+    }
+
+    /**
+     * Рендер группы checkbox'ов
+     */
+    private function render_checkbox_group(array $field): void
+    {
+        $this->render_label($field);
+
+        $options = $field['options'] ?? [];
+        $values = (array) $this->get_field_value($field);
+
+        if (is_string($options)) {
+            $options = array_filter(array_map('trim', explode("\n", $options)));
+        }
+
+        $output = [];
+        $i = 0;
+
+        foreach ($options as $opt_value => $opt_label) {
+            $checked = in_array($opt_value, $values, true) ? ' checked' : '';
+
+            $output[] = sprintf(
+                '<label><input type="checkbox" name="%s[]" value="%s" id="%s-%d"%s> %s</label>',
+                esc_attr($field['name'] ?? $field['id']),
+                esc_attr($opt_value),
+                esc_attr($field['id']),
+                $i,
+                $checked,
+                esc_html($opt_label),
+            );
+
+            $i++;
+        }
+
+        echo '<div class="wp-field-checkbox-group">'.implode('', $output).'</div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер wp_editor
+     */
+    private function render_editor(array $field): void
+    {
+        $this->render_label($field);
+
+        if (function_exists('wp_editor')) {
+            wp_editor($this->get_field_value($field), $field['id'], [
+                'wpautop' => ! empty($field['wpautop']),
+                'media_buttons' => ! empty($field['media_buttons']),
+                'textarea_name' => $field['name'] ?? $field['id'],
+                'textarea_rows' => absint($field['rows'] ?? 10),
+                'teeny' => ! empty($field['teeny']),
+            ]);
+        } else {
+            trigger_error('wp_editor не найден');
+        }
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер media (ID или URL)
+     */
+    private function render_media(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = $this->get_field_value($field);
+        $preview = ! empty($field['preview']) ? $field['preview'] : true;
+        $url = ! empty($field['url']) ? $field['url'] : true;
+        $placeholder = $field['placeholder'] ?? __('Не выбрано', 'wp-field');
+        $button_text = $field['button_text'] ?? __('Загрузить', 'wp-field');
+        $library = $field['library'] ?? ''; // image, video, audio
+
+        // Получаем URL файла если есть ID
+        $file_url = '';
+        $file_name = '';
+        if ($value && is_numeric($value)) {
+            $file_url = wp_get_attachment_url($value);
+            $file_name = basename($file_url);
+        } elseif ($value) {
+            $file_url = $value;
+            $file_name = basename($value);
+        }
+
+        echo '<div class="wp-field-media-wrapper">';
+
+        // Поле ввода с placeholder
+        if ($url) {
+            printf(
+                '<input type="text" class="regular-text wp-field-media-url" value="%s" placeholder="%s" readonly>',
+                esc_attr($file_url),
+                esc_attr($placeholder),
+            );
+        }
+
+        // Hidden поле для ID
+        printf(
+            '<input type="hidden" id="%s" name="%s" value="%s" class="wp-field-media-id">',
+            esc_attr($field['id']),
+            esc_attr($field['name'] ?? $field['id']),
+            esc_attr($value),
+        );
+
+        // Кнопка загрузки
+        printf(
+            '<button type="button" class="button wp-field-media-button" data-field-id="%s" data-library="%s">%s</button>',
+            esc_attr($field['id']),
+            esc_attr($library),
+            esc_html($button_text),
+        );
+
+        // Превью если включено
+        if ($preview && $file_url) {
+            $mime_type = '';
+            if (is_numeric($value)) {
+                $mime_type = get_post_mime_type($value);
+            }
+
+            echo '<div class="wp-field-media-preview">';
+            if (strpos($mime_type, 'image') !== false || (! $mime_type && preg_match('/\.(jpg|jpeg|png|gif|webp|svg)$/i', $file_url))) {
+                printf('<img src="%s" alt="">', esc_url($file_url));
+            } else {
+                printf('<span class="wp-field-media-filename">%s</span>', esc_html($file_name));
+            }
+            echo '</div>';
+        }
+
+        echo '</div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер image
+     */
+    private function render_image(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = $this->get_field_value($field);
+        $src = is_numeric($value) ? wp_get_attachment_url($value) : $value;
+        $preview = ! empty($field['preview']) ? $field['preview'] : true;
+        $url = ! empty($field['url']) ? $field['url'] : true;
+        $placeholder = $field['placeholder'] ?? __('Не выбрано', 'wp-field');
+        $button_text = $field['button_text'] ?? __('Загрузить', 'wp-field');
+        $remove_text = $field['remove_text'] ?? __('Удалить', 'wp-field');
+
+        echo '<div class="wp-field-image-wrapper">';
+
+        // Поле ввода с URL если включено
+        if ($url) {
+            printf(
+                '<input type="text" class="regular-text wp-field-image-url" value="%s" placeholder="%s" readonly>',
+                esc_attr($src),
+                esc_attr($placeholder),
+            );
+        }
+
+        // Hidden поле для ID
+        printf(
+            '<input type="hidden" id="%s" name="%s" value="%s" class="wp-field-image-id">',
+            esc_attr($field['id']),
+            esc_attr($field['name'] ?? $field['id']),
+            esc_attr($value),
+        );
+
+        // Кнопки
+        printf(
+            '<button type="button" class="button wp-field-image-button" data-field-id="%s">%s</button>',
+            esc_attr($field['id']),
+            esc_html($button_text),
+        );
+
+        if ($value) {
+            printf(
+                '<button type="button" class="button wp-field-image-remove" data-field-id="%s">%s</button>',
+                esc_attr($field['id']),
+                esc_html($remove_text),
+            );
+        }
+
+        // Превью если включено
+        if ($preview && $src) {
+            echo '<div class="wp-field-image-preview-wrapper">';
+            printf('<img src="%s" alt="" class="wp-field-image-preview">', esc_url($src));
+            echo '</div>';
+        }
+
+        echo '</div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер file
+     */
+    private function render_file(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = $this->get_field_value($field);
+        $url = ! empty($field['url']) ? $field['url'] : true;
+        $placeholder = $field['placeholder'] ?? __('Не выбрано', 'wp-field');
+        $button_text = $field['button_text'] ?? __('Загрузить', 'wp-field');
+        $library = $field['library'] ?? ''; // image, video, audio
+
+        // Получаем URL файла если есть ID
+        $file_url = '';
+        $file_name = '';
+        if ($value && is_numeric($value)) {
+            $file_url = wp_get_attachment_url($value);
+            $file_name = basename($file_url);
+        } elseif ($value) {
+            $file_url = $value;
+            $file_name = basename($value);
+        }
+
+        echo '<div class="wp-field-file-wrapper">';
+
+        // Поле ввода с URL если включено
+        if ($url) {
+            printf(
+                '<input type="text" class="regular-text wp-field-file-url" value="%s" placeholder="%s" readonly>',
+                esc_attr($file_url),
+                esc_attr($placeholder),
+            );
+        }
+
+        // Hidden поле для ID
+        printf(
+            '<input type="hidden" id="%s" name="%s" value="%s" class="wp-field-file-id">',
+            esc_attr($field['id']),
+            esc_attr($field['name'] ?? $field['id']),
+            esc_attr($value),
+        );
+
+        // Кнопка загрузки
+        printf(
+            '<button type="button" class="button wp-field-file-button" data-field-id="%s" data-library="%s">%s</button>',
+            esc_attr($field['id']),
+            esc_attr($library),
+            esc_html($button_text),
+        );
+
+        // Показываем имя файла если выбран
+        if ($file_name) {
+            printf('<span class="wp-field-file-name">%s</span>', esc_html($file_name));
+        }
+
+        echo '</div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер gallery
+     */
+    private function render_gallery(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = $this->get_field_value($field);
+        $ids = is_array($value) ? $value : array_filter(explode(',', $value));
+
+        $add_text = $field['add_button'] ?? __('Добавить галерею', 'wp-field');
+        $edit_text = $field['edit_button'] ?? __('Редактировать галерею', 'wp-field');
+        $remove_text = $field['clear_button'] ?? __('Сброс', 'wp-field');
+
+        echo '<div class="wp-field-gallery-wrapper">';
+
+        // Hidden поле для хранения ID изображений
+        printf(
+            '<input type="hidden" id="%s" name="%s" value="%s" class="wp-field-gallery-ids">',
+            esc_attr($field['id']),
+            esc_attr($field['name'] ?? $field['id']),
+            esc_attr(implode(',', $ids)),
+        );
+
+        // Контейнер для превью изображений
+        echo '<div class="wp-field-gallery-preview">';
+        if (! empty($ids)) {
+            foreach ($ids as $id) {
+                if (is_numeric($id)) {
+                    $img_url = wp_get_attachment_image_url($id, 'thumbnail');
+                    if ($img_url) {
+                        printf(
+                            '<div class="wp-field-gallery-item" data-id="%s"><img src="%s" alt=""><span class="wp-field-gallery-remove" data-id="%s">×</span></div>',
+                            esc_attr($id),
+                            esc_url($img_url),
+                            esc_attr($id),
+                        );
+                    }
+                }
+            }
+        }
+        echo '</div>';
+
+        // Кнопки управления
+        echo '<div class="wp-field-gallery-buttons">';
+        printf(
+            '<button type="button" class="button wp-field-gallery-add" data-field-id="%s">%s</button>',
+            esc_attr($field['id']),
+            esc_html($add_text),
+        );
+        printf(
+            '<button type="button" class="button wp-field-gallery-edit" data-field-id="%s">%s</button>',
+            esc_attr($field['id']),
+            esc_html($edit_text),
+        );
+        printf(
+            '<button type="button" class="button wp-field-gallery-clear" data-field-id="%s">%s</button>',
+            esc_attr($field['id']),
+            esc_html($remove_text),
+        );
+        echo '</div>';
+
+        echo '</div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер color picker
+     */
+    private function render_color(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = $this->get_field_value($field);
+        $default = $field['default'] ?? '#000000';
+        $alpha = isset($field['alpha']) && $field['alpha'] === false ? 'false' : 'true';
+
+        printf(
+            '<input type="text" id="%s" name="%s" value="%s" class="wp-color-picker-field" data-default-color="%s" data-alpha="%s" %s>',
+            esc_attr($field['id']),
+            esc_attr($field['name'] ?? $field['id']),
+            esc_attr($value),
+            esc_attr($default),
+            esc_attr($alpha),
+            $this->get_field_attributes($field),
+        );
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер date/time/datetime
+     */
+    private function render_date(array $field): void
+    {
+        $this->render_label($field);
+
+        printf(
+            '<input class="%s" id="%s" name="%s" type="%s" value="%s" %s>',
+            esc_attr($field['class'] ?? 'regular-text'),
+            esc_attr($field['id']),
+            esc_attr($field['name'] ?? $field['id']),
+            esc_attr($field['type'] ?? 'date'),
+            esc_attr($this->get_field_value($field)),
+            $this->get_field_attributes($field),
+        );
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер group (вложенные поля)
+     */
+    private function render_group(array $field): void
+    {
+        $this->render_label($field);
+
+        if (empty($field['fields'])) {
+            return;
+        }
+
+        echo '<div class="wp-field-group">';
+
+        foreach ($field['fields'] as $sub_field) {
+            $sub_field['name'] = $field['name'] ?? $field['id'];
+            $obj = new self($sub_field, $this->storage_type, $this->storage_id);
+            $obj->render(true);
+        }
+
+        echo '</div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер поля с wrapper'ом
+     *
+     * @param  bool  $output  выводить HTML или вернуть строку
+     * @return false|string|void
+     */
+    public function render($output = true)
+    {
+        if (! $output) {
+            ob_start();
+        }
+
+        // Определяем видимость по зависимостям
+        $is_hidden = $this->is_field_hidden();
+        $hidden_class = $is_hidden ? ' is-hidden' : '';
+        $dependency_data = $this->get_dependency_data();
+
+        // Открываем wrapper
+        printf(
+            '<div class="wp-field wp-field-%s%s" data-field-id="%s" data-field-type="%s"%s>',
+            esc_attr($this->field['type']),
+            $hidden_class,
+            esc_attr($this->field['id']),
+            esc_attr($this->field['type']),
+            $dependency_data ? ' data-dependency=\''.esc_attr($dependency_data).'\'' : '',
+        );
+
+        // Рендерим поле через реестр
+        $this->render_field();
+
+        // Закрываем wrapper
+        echo '</div>';
+
+        if (! $output) {
+            return ob_get_clean();
+        }
+    }
+
+    /**
+     * Проверка, скрыто ли поле по зависимостям
+     */
+    private function is_field_hidden(): bool
+    {
+        if (empty($this->field['dependency'])) {
+            return false;
+        }
+
+        return ! $this->evaluate_dependency($this->field['dependency']);
+    }
+
+    /**
+     * Оценка условия зависимости
+     */
+    private function evaluate_dependency(array $dependency): bool
+    {
+        $relation = $dependency['relation'] ?? 'AND';
+        $conditions = array_filter($dependency, fn ($k) => $k !== 'relation', ARRAY_FILTER_USE_KEY);
+
+        if (empty($conditions)) {
+            return true;
+        }
+
+        $results = [];
+        foreach ($conditions as $condition) {
+            if (! is_array($condition) || count($condition) < 3) {
+                continue;
+            }
+
+            [$field_id, $operator, $value] = $condition;
+            $field_value = $this->get_value_for_dependency($field_id);
+            $results[] = $this->evaluate_condition($field_value, $operator, $value);
+        }
+
+        if (empty($results)) {
+            return true;
+        }
+
+        return $relation === 'AND' ? ! in_array(false, $results, true) : in_array(true, $results, true);
+    }
+
+    /**
+     * Получить значение поля для проверки зависимости
+     */
+    private function get_value_for_dependency(string $field_id)
+    {
+        return $this->get_value($field_id, $this->storage_id);
+    }
+
+    /**
+     * Оценить одно условие
+     */
+    private function evaluate_condition($field_value, string $operator, $compare_value): bool
+    {
+        return match ($operator) {
+            '==' => $field_value == $compare_value,
+            '!=' => $field_value != $compare_value,
+            '>' => $field_value > $compare_value,
+            '>=' => $field_value >= $compare_value,
+            '<' => $field_value < $compare_value,
+            '<=' => $field_value <= $compare_value,
+            'in' => is_array($compare_value) && in_array($field_value, $compare_value, true),
+            'not_in' => is_array($compare_value) && ! in_array($field_value, $compare_value, true),
+            'contains' => is_string($field_value) && str_contains($field_value, (string) $compare_value),
+            'not_contains' => is_string($field_value) && ! str_contains($field_value, (string) $compare_value),
+            'empty' => empty($field_value),
+            'not_empty' => ! empty($field_value),
+            default => false,
+        };
+    }
+
+    /**
+     * Получить JSON данные зависимостей для JS
+     */
+    private function get_dependency_data(): string
+    {
+        if (empty($this->field['dependency'])) {
+            return '';
+        }
+
+        return wp_json_encode($this->field['dependency']);
+    }
+
+    /**
+     * Рендер поля по типу из реестра
+     */
+    private function render_field(): void
+    {
+        $type = $this->field['type'] ?? 'text';
+
+        if (! isset(self::$field_types[$type])) {
+            trigger_error("Неизвестный тип поля: {$type}");
+
+            return;
+        }
+
+        [$method, $defaults] = self::$field_types[$type];
+
+        // Мержим дефолты с полем
+        $field = array_merge($defaults, $this->field);
+
+        // Вызываем метод рендера
+        if (method_exists($this, $method)) {
+            $this->$method($field);
+        } else {
+            trigger_error("Метод рендера не найден: {$method}");
+        }
+    }
+
+    /**
+     * Рендер repeater (массив элементов)
+     */
+    private function render_repeater(array $field): void
+    {
+        $this->render_label($field);
+
+        $values = (array) $this->get_field_value($field);
+        $min = absint($field['min'] ?? 0);
+        $max = absint($field['max'] ?? 0);
+
+        echo '<div class="wp-field-repeater" data-field-id="'.esc_attr($field['id']).'" data-min="'.$min.'" data-max="'.$max.'">';
+
+        // Рендерим существующие элементы
+        if (! empty($values)) {
+            foreach ($values as $index => $item) {
+                $this->render_repeater_item($field, $index, $item);
+            }
+        }
+
+        // Всегда добавляем один шаблон для клонирования (скрыт через CSS)
+        $this->render_repeater_item($field, 0, [], true);
+
+        echo '</div>';
+
+        printf(
+            '<button type="button" class="button wp-field-repeater-add" data-field-id="%s">%s</button>',
+            esc_attr($field['id']),
+            esc_html($field['add_text'] ?? __('Add Item', 'wp-field')),
+        );
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер одного элемента repeater
+     */
+    private function render_repeater_item(array $field, int $index, $item = [], bool $template = false): void
+    {
+        $class = $template ? ' wp-field-repeater-template' : '';
+
+        printf(
+            '<div class="wp-field-repeater-item%s" data-index="%d">',
+            $class,
+            $index,
+        );
+
+        if (! empty($field['fields'])) {
+            foreach ($field['fields'] as $sub_field) {
+                // Формируем правильный name: parent_name[index][subfield_id]
+                $parent_name = $field['name'] ?? $field['id'];
+                $sub_field['name'] = sprintf('%s[%d][%s]', $parent_name, $index, $sub_field['id']);
+                $sub_field['value'] = is_array($item) && isset($item[$sub_field['id']]) ? $item[$sub_field['id']] : null;
+
+                $obj = new self($sub_field, $this->storage_type, $this->storage_id);
+                $obj->render(true);
+            }
+        }
+
+        printf(
+            '<button type="button" class="button wp-field-repeater-remove">%s</button>',
+            esc_html(__('Remove', 'wp-field')),
+        );
+
+        echo '</div>';
+    }
+
+    /**
+     * Рендер image picker (legacy)
+     */
+    private function render_image_picker(array $field): void
+    {
+        // Используем select с data-img-src для каждой опции
+        $this->render_label($field);
+
+        $options = $field['options'] ?? [];
+        $value = $this->get_field_value($field);
+
+        printf(
+            '<select class="wp-field-image-picker" id="%s" name="%s">',
+            esc_attr($field['id']),
+            esc_attr($field['name'] ?? $field['id']),
+        );
+
+        foreach ($options as $opt_value => $opt_data) {
+            $selected = $value === $opt_value ? ' selected' : '';
+            $img_src = is_array($opt_data) ? ($opt_data['src'] ?? '') : $opt_data;
+
+            printf(
+                '<option value="%s" data-img-src="%s"%s>%s</option>',
+                esc_attr($opt_value),
+                esc_url($img_src),
+                $selected,
+                esc_html(is_array($opt_data) ? ($opt_data['label'] ?? $opt_value) : $opt_value),
+            );
+        }
+
+        echo '</select>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер switcher (переключатель on/off)
+     */
+    private function render_switcher(array $field): void
+    {
+        $value = $this->get_field_value($field);
+        $checked = ! empty($value) ? 'checked' : '';
+        $text_on = $field['text_on'] ?? 'On';
+        $text_off = $field['text_off'] ?? 'Off';
+
+        printf(
+            '<label class="wp-field-switcher">
+                <input type="checkbox" name="%s" value="1" %s %s %s />
+                <span class="wp-field-switcher-slider">
+                    <span class="wp-field-switcher-on">%s</span>
+                    <span class="wp-field-switcher-off">%s</span>
+                </span>
+            </label>',
+            esc_attr($field['name'] ?? $field['id']),
+            $checked,
+            $this->get_field_attributes($field),
+            $this->get_readonly_disabled($field),
+            esc_html($text_on),
+            esc_html($text_off),
+        );
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер spinner (счётчик с кнопками)
+     */
+    private function render_spinner(array $field): void
+    {
+        $value = $this->get_field_value($field);
+        $min = $field['min'] ?? 0;
+        $max = $field['max'] ?? 100;
+        $step = $field['step'] ?? 1;
+        $unit = $field['unit'] ?? '';
+
+        echo '<div class="wp-field-spinner">';
+
+        // Кнопка уменьшения
+        printf(
+            '<button type="button" class="wp-field-spinner-btn wp-field-spinner-down" data-step="%s">◄</button>',
+            esc_attr($step),
+        );
+
+        // Обёртка для input + unit
+        echo '<div class="wp-field-spinner-input-wrap">';
+
+        printf(
+            '<input type="number" name="%s" value="%s" min="%s" max="%s" step="%s" %s %s />',
+            esc_attr($field['name'] ?? $field['id']),
+            esc_attr($value),
+            esc_attr($min),
+            esc_attr($max),
+            esc_attr($step),
+            $this->get_field_attributes($field),
+            $this->get_readonly_disabled($field),
+        );
+
+        // Unit внутри обёртки справа
+        if ($unit) {
+            printf('<span class="wp-field-spinner-unit">%s</span>', esc_html($unit));
+        }
+
+        echo '</div>';
+
+        // Кнопка увеличения
+        printf(
+            '<button type="button" class="wp-field-spinner-btn wp-field-spinner-up" data-step="%s">►</button>',
+            esc_attr($step),
+        );
+
+        echo '</div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер button_set (группа кнопок для выбора)
+     */
+    private function render_button_set(array $field): void
+    {
+        $value = $this->get_field_value($field);
+        $options = $field['options'] ?? [];
+        $multiple = ! empty($field['multiple']);
+
+        if (empty($options)) {
+            echo '<p class="description">No options provided</p>';
+
+            return;
+        }
+
+        echo '<div class="wp-field-button-set">';
+
+        if ($multiple) {
+            $values = is_array($value) ? $value : ($value ? [$value] : []);
+            foreach ($options as $key => $label) {
+                $checked = in_array($key, $values) ? 'checked' : '';
+                printf(
+                    '<label class="wp-field-button-set-item %s">
+                        <input type="checkbox" name="%s[]" value="%s" %s %s />
+                        <span>%s</span>
+                    </label>',
+                    $checked ? 'active' : '',
+                    esc_attr($field['name'] ?? $field['id']),
+                    esc_attr($key),
+                    $checked,
+                    $this->get_field_attributes($field),
+                    esc_html($label),
+                );
+            }
+        } else {
+            foreach ($options as $key => $label) {
+                $checked = $value === $key ? 'checked' : '';
+                printf(
+                    '<label class="wp-field-button-set-item %s">
+                        <input type="radio" name="%s" value="%s" %s %s />
+                        <span>%s</span>
+                    </label>',
+                    $checked ? 'active' : '',
+                    esc_attr($field['name'] ?? $field['id']),
+                    esc_attr($key),
+                    $checked,
+                    $this->get_field_attributes($field),
+                    esc_html($label),
+                );
+            }
+        }
+
+        echo '</div>';
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер slider (ползунок)
+     */
+    private function render_slider(array $field): void
+    {
+        $value = $this->get_field_value($field);
+        $min = $field['min'] ?? 0;
+        $max = $field['max'] ?? 100;
+        $step = $field['step'] ?? 1;
+        $show_value = ! empty($field['show_value']);
+
+        printf(
+            '<div class="wp-field-slider-wrapper">
+                <input type="range" class="wp-field-slider" name="%s" value="%s" min="%s" max="%s" step="%s" %s %s />
+                %s
+            </div>',
+            esc_attr($field['name'] ?? $field['id']),
+            esc_attr($value),
+            esc_attr($min),
+            esc_attr($max),
+            esc_attr($step),
+            $this->get_field_attributes($field),
+            $this->get_readonly_disabled($field),
+            $show_value ? '<span class="wp-field-slider-value">'.esc_html($value).'</span>' : '',
+        );
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер heading (заголовок)
+     */
+    private function render_heading(array $field): void
+    {
+        $tag = $field['tag'] ?? 'h3';
+        $class = $field['class'] ?? 'wp-field-heading';
+
+        printf(
+            '<%s class="%s">%s</%s>',
+            tag_escape($tag),
+            esc_attr($class),
+            esc_html($field['label'] ?? ''),
+            tag_escape($tag),
+        );
+    }
+
+    /**
+     * Рендер subheading (подзаголовок)
+     */
+    private function render_subheading(array $field): void
+    {
+        $tag = $field['tag'] ?? 'h4';
+        $class = $field['class'] ?? 'wp-field-subheading';
+
+        printf(
+            '<%s class="%s">%s</%s>',
+            tag_escape($tag),
+            esc_attr($class),
+            esc_html($field['label'] ?? ''),
+            tag_escape($tag),
+        );
+    }
+
+    /**
+     * Рендер notice (уведомление)
+     */
+    private function render_notice(array $field): void
+    {
+        $type = $field['type_notice'] ?? $field['notice_type'] ?? 'info';
+        $class = 'wp-field-notice wp-field-notice-'.esc_attr($type);
+
+        printf(
+            '<div class="%s">%s</div>',
+            $class,
+            wp_kses_post($field['label'] ?? ''),
+        );
+    }
+
+    /**
+     * Рендер content (контент/HTML)
+     */
+    private function render_content(array $field): void
+    {
+        echo wp_kses_post($field['label'] ?? '');
+    }
+
+    /**
+     * Рендер fieldset (группировка полей)
+     */
+    private function render_fieldset(array $field): void
+    {
+        $legend = $field['legend'] ?? $field['label'] ?? '';
+        $class = $field['class'] ?? 'wp-field-fieldset';
+
+        printf(
+            '<fieldset class="%s">',
+            esc_attr($class),
+        );
+
+        if ($legend) {
+            printf(
+                '<legend>%s</legend>',
+                esc_html($legend),
+            );
+        }
+
+        // Рендер вложенных полей если они есть
+        if (! empty($field['fields']) && is_array($field['fields'])) {
+            foreach ($field['fields'] as $nested_field) {
+                WP_Field::make($nested_field, true);
+            }
+        }
+
+        echo '</fieldset>';
+    }
+
+    /**
+     * Make new filed
+     *
+     * @param  array  $params  data, type, id,
+     * @param  bool  $output  html|string
+     * @return false|string|null
+     */
+    public static function make(array $params, bool $output = true)
+    {
+        if (isset($params[0]) && is_array($params[0])) {
+            $obj = new self($params[0], $params[1] ?? 'post', $params[2] ?? null);
+        } else {
+            $obj = new self($params);
+        }
+
+        return $obj->render($output);
+    }
+
+    /**
+     * Рендер accordion (свёртываемые секции)
+     */
+    private function render_accordion(array $field): void
+    {
+        $this->render_label($field);
+
+        // Поддерживаем оба варианта: items и sections
+        $items = $field['items'] ?? $field['sections'] ?? [];
+
+        if (empty($items) || ! is_array($items)) {
+            echo '<p class="description">No items provided</p>';
+
+            return;
+        }
+
+        echo '<div class="wp-field-accordion" data-field-id="'.esc_attr($field['id']).'">';
+
+        foreach ($items as $index => $item) {
+            $title = $item['title'] ?? 'Item '.($index + 1);
+            $content = $item['content'] ?? '';
+            $fields = $item['fields'] ?? [];
+            $open = ! empty($item['open']);
+
+            printf(
+                '<div class="wp-field-accordion-item %s" data-index="%d">
+                    <div class="wp-field-accordion-header">
+                        <span class="wp-field-accordion-icon">%s</span>
+                        <span class="wp-field-accordion-title">%s</span>
+                    </div>
+                    <div class="wp-field-accordion-content">',
+                $open ? 'is-open' : '',
+                $index,
+                $open ? '▼' : '▶',
+                esc_html($title),
+            );
+
+            if ($content) {
+                echo wp_kses_post($content);
+            }
+
+            if (! empty($fields)) {
+                foreach ($fields as $sub_field) {
+                    $obj = new self($sub_field, $this->storage_type, $this->storage_id);
+                    $obj->render(true);
+                }
+            }
+
+            echo '</div></div>';
+        }
+
+        echo '</div>';
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер tabbed (вкладки)
+     */
+    private function render_tabbed(array $field): void
+    {
+        $this->render_label($field);
+
+        if (empty($field['tabs']) || ! is_array($field['tabs'])) {
+            echo '<p class="description">No tabs provided</p>';
+
+            return;
+        }
+
+        $field_id = esc_attr($field['id']);
+
+        // Определяем, какая вкладка должна быть активной по умолчанию
+        $default_active_index = 0;
+        foreach ($field['tabs'] as $index => $tab) {
+            if (! empty($tab['active'])) {
+                $default_active_index = $index;
+                break;
+            }
+        }
+
+        echo '<div class="wp-field-tabbed" data-field-id="'.$field_id.'" data-default-tab="'.$default_active_index.'">';
+        echo '<div class="wp-field-tabbed-nav">';
+
+        foreach ($field['tabs'] as $index => $tab) {
+            $title = $tab['title'] ?? 'Tab '.($index + 1);
+            $icon = $tab['icon'] ?? '';
+            $active = $index === $default_active_index ? 'active' : '';
+
+            printf(
+                '<button type="button" class="wp-field-tabbed-nav-item %s" data-tab="%s-%d">
+                    %s<span>%s</span>
+                </button>',
+                $active,
+                $field_id,
+                $index,
+                $icon ? '<span class="wp-field-tabbed-icon">'.esc_html($icon).'</span>' : '',
+                esc_html($title),
+            );
+        }
+
+        echo '</div><div class="wp-field-tabbed-content">';
+
+        foreach ($field['tabs'] as $index => $tab) {
+            $content = $tab['content'] ?? '';
+            $fields = $tab['fields'] ?? [];
+            $active = $index === $default_active_index ? 'active' : '';
+
+            printf(
+                '<div class="wp-field-tabbed-pane %s" data-tab="%s-%d">',
+                $active,
+                $field_id,
+                $index,
+            );
+
+            if ($content) {
+                echo wp_kses_post($content);
+            }
+
+            if (! empty($fields)) {
+                foreach ($fields as $sub_field) {
+                    $obj = new self($sub_field, $this->storage_type, $this->storage_id);
+                    $obj->render(true);
+                }
+            }
+
+            echo '</div>';
+        }
+
+        echo '</div></div>';
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер typography (типография)
+     */
+    private function render_typography(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = (array) $this->get_field_value($field);
+        $name = $field['name'] ?? $field['id'];
+
+        $defaults = [
+            'font_family' => $value['font_family'] ?? '',
+            'font_size' => $value['font_size'] ?? '',
+            'font_weight' => $value['font_weight'] ?? '',
+            'line_height' => $value['line_height'] ?? '',
+            'text_align' => $value['text_align'] ?? '',
+            'text_transform' => $value['text_transform'] ?? '',
+            'color' => $value['color'] ?? '',
+        ];
+
+        echo '<div class="wp-field-typography">';
+
+        // Font Family
+        printf(
+            '<div class="wp-field-typography-item">
+                <label>Font Family</label>
+                <select name="%s[font_family]">
+                    <option value="">Default</option>
+                    <option value="Arial" %s>Arial</option>
+                    <option value="Helvetica" %s>Helvetica</option>
+                    <option value="Times New Roman" %s>Times New Roman</option>
+                    <option value="Georgia" %s>Georgia</option>
+                    <option value="Verdana" %s>Verdana</option>
+                </select>
+            </div>',
+            esc_attr($name),
+            selected($defaults['font_family'], 'Arial', false),
+            selected($defaults['font_family'], 'Helvetica', false),
+            selected($defaults['font_family'], 'Times New Roman', false),
+            selected($defaults['font_family'], 'Georgia', false),
+            selected($defaults['font_family'], 'Verdana', false),
+        );
+
+        // Font Size
+        printf(
+            '<div class="wp-field-typography-item">
+                <label>Font Size</label>
+                <input type="number" name="%s[font_size]" value="%s" min="8" max="72" placeholder="16">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['font_size']),
+        );
+
+        // Font Weight
+        printf(
+            '<div class="wp-field-typography-item">
+                <label>Font Weight</label>
+                <select name="%s[font_weight]">
+                    <option value="">Default</option>
+                    <option value="300" %s>Light (300)</option>
+                    <option value="400" %s>Normal (400)</option>
+                    <option value="600" %s>Semi Bold (600)</option>
+                    <option value="700" %s>Bold (700)</option>
+                </select>
+            </div>',
+            esc_attr($name),
+            selected($defaults['font_weight'], '300', false),
+            selected($defaults['font_weight'], '400', false),
+            selected($defaults['font_weight'], '600', false),
+            selected($defaults['font_weight'], '700', false),
+        );
+
+        // Line Height
+        printf(
+            '<div class="wp-field-typography-item">
+                <label>Line Height</label>
+                <input type="number" name="%s[line_height]" value="%s" min="1" max="3" step="0.1" placeholder="1.5">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['line_height']),
+        );
+
+        // Text Align
+        printf(
+            '<div class="wp-field-typography-item">
+                <label>Text Align</label>
+                <select name="%s[text_align]">
+                    <option value="">Default</option>
+                    <option value="left" %s>Left</option>
+                    <option value="center" %s>Center</option>
+                    <option value="right" %s>Right</option>
+                    <option value="justify" %s>Justify</option>
+                </select>
+            </div>',
+            esc_attr($name),
+            selected($defaults['text_align'], 'left', false),
+            selected($defaults['text_align'], 'center', false),
+            selected($defaults['text_align'], 'right', false),
+            selected($defaults['text_align'], 'justify', false),
+        );
+
+        // Text Transform
+        printf(
+            '<div class="wp-field-typography-item">
+                <label>Text Transform</label>
+                <select name="%s[text_transform]">
+                    <option value="">Default</option>
+                    <option value="none" %s>None</option>
+                    <option value="uppercase" %s>Uppercase</option>
+                    <option value="lowercase" %s>Lowercase</option>
+                    <option value="capitalize" %s>Capitalize</option>
+                </select>
+            </div>',
+            esc_attr($name),
+            selected($defaults['text_transform'], 'none', false),
+            selected($defaults['text_transform'], 'uppercase', false),
+            selected($defaults['text_transform'], 'lowercase', false),
+            selected($defaults['text_transform'], 'capitalize', false),
+        );
+
+        // Color
+        printf(
+            '<div class="wp-field-typography-item">
+                <label>Color</label>
+                <input type="text" name="%s[color]" value="%s" class="wp-color-picker-field">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['color']),
+        );
+
+        echo '</div>';
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер spacing (отступы)
+     */
+    private function render_spacing(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = (array) $this->get_field_value($field);
+        $name = $field['name'] ?? $field['id'];
+        $type = $field['spacing_type'] ?? 'margin'; // margin или padding
+
+        $defaults = [
+            'top' => $value['top'] ?? '',
+            'right' => $value['right'] ?? '',
+            'bottom' => $value['bottom'] ?? '',
+            'left' => $value['left'] ?? '',
+            'unit' => $value['unit'] ?? 'px',
+        ];
+
+        echo '<div class="wp-field-spacing">';
+        echo '<div class="wp-field-spacing-wrapper">';
+        echo '<div class="wp-field-spacing-visual">';
+
+        // Top
+        printf(
+            '<div class="wp-field-spacing-side wp-field-spacing-top">
+                <label>Top</label>
+                <input type="number" name="%s[top]" value="%s" placeholder="0" step="1">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['top']),
+        );
+
+        // Right
+        printf(
+            '<div class="wp-field-spacing-side wp-field-spacing-right">
+                <label>Right</label>
+                <input type="number" name="%s[right]" value="%s" placeholder="0" step="1">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['right']),
+        );
+
+        // Bottom
+        printf(
+            '<div class="wp-field-spacing-side wp-field-spacing-bottom">
+                <label>Bottom</label>
+                <input type="number" name="%s[bottom]" value="%s" placeholder="0" step="1">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['bottom']),
+        );
+
+        // Left
+        printf(
+            '<div class="wp-field-spacing-side wp-field-spacing-left">
+                <label>Left</label>
+                <input type="number" name="%s[left]" value="%s" placeholder="0" step="1">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['left']),
+        );
+
+        // Center label
+        echo '<div class="wp-field-spacing-center">'.esc_html($type).'</div>';
+
+        echo '</div>'; // .wp-field-spacing-visual
+
+        // Unit selector
+        printf(
+            '<div class="wp-field-spacing-unit">
+                <select name="%s[unit]">
+                    <option value="px" %s>px</option>
+                    <option value="em" %s>em</option>
+                    <option value="rem" %s>rem</option>
+                    <option value="%%" %s>%%</option>
+                </select>
+            </div>',
+            esc_attr($name),
+            selected($defaults['unit'], 'px', false),
+            selected($defaults['unit'], 'em', false),
+            selected($defaults['unit'], 'rem', false),
+            selected($defaults['unit'], '%', false),
+        );
+
+        echo '</div>'; // .wp-field-spacing-wrapper
+        echo '</div>'; // .wp-field-spacing
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер dimensions (размеры)
+     */
+    private function render_dimensions(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = (array) $this->get_field_value($field);
+        $name = $field['name'] ?? $field['id'];
+
+        $defaults = [
+            'width' => $value['width'] ?? '',
+            'height' => $value['height'] ?? '',
+            'unit' => $value['unit'] ?? 'px',
+        ];
+
+        echo '<div class="wp-field-dimensions">';
+
+        // Width
+        printf(
+            '<div class="wp-field-dimensions-item">
+                <label>Width</label>
+                <input type="number" name="%s[width]" value="%s" placeholder="0">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['width']),
+        );
+
+        // Height
+        printf(
+            '<div class="wp-field-dimensions-item">
+                <label>Height</label>
+                <input type="number" name="%s[height]" value="%s" placeholder="0">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['height']),
+        );
+
+        // Unit
+        printf(
+            '<div class="wp-field-dimensions-item">
+                <label>Unit</label>
+                <select name="%s[unit]">
+                    <option value="px" %s>px</option>
+                    <option value="em" %s>em</option>
+                    <option value="rem" %s>rem</option>
+                    <option value="%%" %s>%%</option>
+                    <option value="vh" %s>vh</option>
+                    <option value="vw" %s>vw</option>
+                </select>
+            </div>',
+            esc_attr($name),
+            selected($defaults['unit'], 'px', false),
+            selected($defaults['unit'], 'em', false),
+            selected($defaults['unit'], 'rem', false),
+            selected($defaults['unit'], '%', false),
+            selected($defaults['unit'], 'vh', false),
+            selected($defaults['unit'], 'vw', false),
+        );
+
+        echo '</div>';
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер border (граница)
+     */
+    private function render_border(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = (array) $this->get_field_value($field);
+        $name = $field['name'] ?? $field['id'];
+
+        $defaults = [
+            'style' => $value['style'] ?? 'solid',
+            'width' => $value['width'] ?? '',
+            'color' => $value['color'] ?? '',
+        ];
+
+        echo '<div class="wp-field-border">';
+
+        // Style
+        printf(
+            '<div class="wp-field-border-item">
+                <label>Style</label>
+                <select name="%s[style]">
+                    <option value="none" %s>None</option>
+                    <option value="solid" %s>Solid</option>
+                    <option value="dashed" %s>Dashed</option>
+                    <option value="dotted" %s>Dotted</option>
+                    <option value="double" %s>Double</option>
+                </select>
+            </div>',
+            esc_attr($name),
+            selected($defaults['style'], 'none', false),
+            selected($defaults['style'], 'solid', false),
+            selected($defaults['style'], 'dashed', false),
+            selected($defaults['style'], 'dotted', false),
+            selected($defaults['style'], 'double', false),
+        );
+
+        // Width
+        printf(
+            '<div class="wp-field-border-item">
+                <label>Width (px)</label>
+                <input type="number" name="%s[width]" value="%s" min="0" max="20" placeholder="1">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['width']),
+        );
+
+        // Color
+        printf(
+            '<div class="wp-field-border-item">
+                <label>Color</label>
+                <input type="text" name="%s[color]" value="%s" class="wp-color-picker-field">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['color']),
+        );
+
+        echo '</div>';
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер background (фон)
+     */
+    private function render_background(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = (array) $this->get_field_value($field);
+        $name = $field['name'] ?? $field['id'];
+
+        $defaults = [
+            'color' => $value['color'] ?? '',
+            'image' => $value['image'] ?? '',
+            'position' => $value['position'] ?? 'center center',
+            'size' => $value['size'] ?? 'cover',
+            'repeat' => $value['repeat'] ?? 'no-repeat',
+            'attachment' => $value['attachment'] ?? 'scroll',
+        ];
+
+        echo '<div class="wp-field-background">';
+
+        // Color
+        printf(
+            '<div class="wp-field-background-item">
+                <label>Background Color</label>
+                <input type="text" name="%s[color]" value="%s" class="wp-color-picker-field">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['color']),
+        );
+
+        // Image
+        printf(
+            '<div class="wp-field-background-item">
+                <label>Background Image</label>
+                <input type="hidden" name="%s[image]" value="%s" class="wp-field-background-image-id">
+                <button type="button" class="button wp-field-background-image-button" data-field-name="%s">Choose Image</button>
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['image']),
+            esc_attr($name),
+        );
+
+        // Position
+        printf(
+            '<div class="wp-field-background-item">
+                <label>Position</label>
+                <select name="%s[position]">
+                    <option value="left top" %s>Left Top</option>
+                    <option value="center top" %s>Center Top</option>
+                    <option value="right top" %s>Right Top</option>
+                    <option value="left center" %s>Left Center</option>
+                    <option value="center center" %s>Center Center</option>
+                    <option value="right center" %s>Right Center</option>
+                    <option value="left bottom" %s>Left Bottom</option>
+                    <option value="center bottom" %s>Center Bottom</option>
+                    <option value="right bottom" %s>Right Bottom</option>
+                </select>
+            </div>',
+            esc_attr($name),
+            selected($defaults['position'], 'left top', false),
+            selected($defaults['position'], 'center top', false),
+            selected($defaults['position'], 'right top', false),
+            selected($defaults['position'], 'left center', false),
+            selected($defaults['position'], 'center center', false),
+            selected($defaults['position'], 'right center', false),
+            selected($defaults['position'], 'left bottom', false),
+            selected($defaults['position'], 'center bottom', false),
+            selected($defaults['position'], 'right bottom', false),
+        );
+
+        // Size
+        printf(
+            '<div class="wp-field-background-item">
+                <label>Size</label>
+                <select name="%s[size]">
+                    <option value="auto" %s>Auto</option>
+                    <option value="cover" %s>Cover</option>
+                    <option value="contain" %s>Contain</option>
+                </select>
+            </div>',
+            esc_attr($name),
+            selected($defaults['size'], 'auto', false),
+            selected($defaults['size'], 'cover', false),
+            selected($defaults['size'], 'contain', false),
+        );
+
+        // Repeat
+        printf(
+            '<div class="wp-field-background-item">
+                <label>Repeat</label>
+                <select name="%s[repeat]">
+                    <option value="no-repeat" %s>No Repeat</option>
+                    <option value="repeat" %s>Repeat</option>
+                    <option value="repeat-x" %s>Repeat X</option>
+                    <option value="repeat-y" %s>Repeat Y</option>
+                </select>
+            </div>',
+            esc_attr($name),
+            selected($defaults['repeat'], 'no-repeat', false),
+            selected($defaults['repeat'], 'repeat', false),
+            selected($defaults['repeat'], 'repeat-x', false),
+            selected($defaults['repeat'], 'repeat-y', false),
+        );
+
+        // Attachment
+        printf(
+            '<div class="wp-field-background-item">
+                <label>Attachment</label>
+                <select name="%s[attachment]">
+                    <option value="scroll" %s>Scroll</option>
+                    <option value="fixed" %s>Fixed</option>
+                </select>
+            </div>',
+            esc_attr($name),
+            selected($defaults['attachment'], 'scroll', false),
+            selected($defaults['attachment'], 'fixed', false),
+        );
+
+        echo '</div>';
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер link_color (цвета ссылок)
+     */
+    private function render_link_color(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = (array) $this->get_field_value($field);
+        $name = $field['name'] ?? $field['id'];
+
+        $defaults = [
+            'normal' => $value['normal'] ?? '',
+            'hover' => $value['hover'] ?? '',
+            'active' => $value['active'] ?? '',
+        ];
+
+        echo '<div class="wp-field-link-color">';
+
+        // Normal
+        printf(
+            '<div class="wp-field-link-color-item">
+                <label>Normal</label>
+                <input type="text" name="%s[normal]" value="%s" class="wp-color-picker-field">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['normal']),
+        );
+
+        // Hover
+        printf(
+            '<div class="wp-field-link-color-item">
+                <label>Hover</label>
+                <input type="text" name="%s[hover]" value="%s" class="wp-color-picker-field">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['hover']),
+        );
+
+        // Active
+        printf(
+            '<div class="wp-field-link-color-item">
+                <label>Active</label>
+                <input type="text" name="%s[active]" value="%s" class="wp-color-picker-field">
+            </div>',
+            esc_attr($name),
+            esc_attr($defaults['active']),
+        );
+
+        echo '</div>';
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер color_group (группа цветов)
+     */
+    private function render_color_group(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = (array) $this->get_field_value($field);
+        $name = $field['name'] ?? $field['id'];
+        $colors = $field['colors'] ?? ['primary' => 'Primary', 'secondary' => 'Secondary', 'accent' => 'Accent'];
+
+        echo '<div class="wp-field-color-group">';
+
+        foreach ($colors as $key => $label) {
+            printf(
+                '<div class="wp-field-color-group-item">
+                    <label>%s</label>
+                    <input type="text" name="%s[%s]" value="%s" class="wp-color-picker-field">
+                </div>',
+                esc_html($label),
+                esc_attr($name),
+                esc_attr($key),
+                esc_attr($value[$key] ?? ''),
+            );
+        }
+
+        echo '</div>';
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер image_select (выбор из изображений)
+     */
+    private function render_image_select(array $field): void
+    {
+        $this->render_label($field);
+
+        $options = $field['options'] ?? [];
+        $value = $this->get_field_value($field);
+        $name = $field['name'] ?? $field['id'];
+
+        if (empty($options)) {
+            echo '<p class="description">No options provided</p>';
+
+            return;
+        }
+
+        echo '<div class="wp-field-image-select">';
+
+        foreach ($options as $key => $option) {
+            $img_src = is_array($option) ? ($option['src'] ?? '') : $option;
+            $img_label = is_array($option) ? ($option['label'] ?? $key) : $key;
+            $checked = $value === $key ? 'checked' : '';
+
+            printf(
+                '<label class="wp-field-image-select-item %s">
+                    <input type="radio" name="%s" value="%s" %s>
+                    <img src="%s" alt="%s">
+                    <span>%s</span>
+                </label>',
+                $checked ? 'selected' : '',
+                esc_attr($name),
+                esc_attr($key),
+                $checked,
+                esc_url($img_src),
+                esc_attr($img_label),
+                esc_html($img_label),
+            );
+        }
+
+        echo '</div>';
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер code_editor (редактор кода с подсветкой синтаксиса)
+     */
+    private function render_code_editor(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = $this->get_field_value($field);
+        $mode = $field['mode'] ?? 'css';
+        $height = $field['height'] ?? '300px';
+        $name = $field['name'] ?? $field['id'];
+
+        // Подключаем wp_enqueue_code_editor
+        if (function_exists('wp_enqueue_code_editor')) {
+            wp_enqueue_code_editor(['type' => $mode]);
+        }
+
+        printf(
+            '<textarea id="%s" name="%s" class="wp-field-code-editor" data-mode="%s" style="height:%s;width:100%%;">%s</textarea>',
+            esc_attr($field['id']),
+            esc_attr($name),
+            esc_attr($mode),
+            esc_attr($height),
+            esc_textarea($value),
+        );
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер icon (выбор иконки)
+     */
+    private function render_icon(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = $this->get_field_value($field);
+        $library = $field['library'] ?? 'dashicons';
+        $name = $field['name'] ?? $field['id'];
+
+        echo '<div class="wp-field-icon-picker">';
+
+        printf(
+            '<input type="hidden" name="%s" value="%s" class="wp-field-icon-value" />',
+            esc_attr($name),
+            esc_attr($value),
+        );
+
+        echo '<button type="button" class="button wp-field-icon-button">';
+        if ($value) {
+            printf('<span class="%s %s"></span> %s', esc_attr($library), esc_attr($value), esc_html($value));
+        } else {
+            echo esc_html__('Select Icon', 'wp-field');
+        }
+        echo '</button>';
+
+        // Modal с иконками
+        echo '<div class="wp-field-icon-modal" style="display:none;">';
+        echo '<div class="wp-field-icon-modal-header">';
+        echo '<input type="text" class="wp-field-icon-search" placeholder="'.esc_attr__('Search icons...', 'wp-field').'">';
+        echo '<button type="button" class="button wp-field-icon-close">×</button>';
+        echo '</div>';
+        echo '<div class="wp-field-icon-grid">';
+
+        $custom_icons = $field['icons'] ?? null;
+        $icons = $this->get_icon_library($library, $custom_icons);
+        foreach ($icons as $icon) {
+            printf(
+                '<span class="%s %s" data-icon="%s" title="%s"></span>',
+                esc_attr($library),
+                esc_attr($icon),
+                esc_attr($icon),
+                esc_attr($icon),
+            );
+        }
+
+        echo '</div></div></div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Получить список иконок библиотеки
+     */
+    private function get_icon_library(string $library, ?array $custom_icons = null): array
+    {
+        // Если переданы кастомные иконки, используем их
+        if (! empty($custom_icons)) {
+            return $custom_icons;
+        }
+
+        if ($library === 'dashicons') {
+            return [
+                'dashicons-admin-site', 'dashicons-dashboard', 'dashicons-admin-post', 'dashicons-admin-media',
+                'dashicons-admin-links', 'dashicons-admin-page', 'dashicons-admin-comments', 'dashicons-admin-appearance',
+                'dashicons-admin-plugins', 'dashicons-admin-users', 'dashicons-admin-tools', 'dashicons-admin-settings',
+                'dashicons-admin-network', 'dashicons-admin-home', 'dashicons-admin-generic', 'dashicons-admin-collapse',
+                'dashicons-filter', 'dashicons-admin-customizer', 'dashicons-admin-multisite', 'dashicons-welcome-write-blog',
+                'dashicons-welcome-add-page', 'dashicons-welcome-view-site', 'dashicons-welcome-widgets-menus', 'dashicons-welcome-comments',
+                'dashicons-welcome-learn-more', 'dashicons-format-aside', 'dashicons-format-image', 'dashicons-format-gallery',
+                'dashicons-format-video', 'dashicons-format-status', 'dashicons-format-quote', 'dashicons-format-chat',
+                'dashicons-format-audio', 'dashicons-camera', 'dashicons-images-alt', 'dashicons-images-alt2',
+                'dashicons-video-alt', 'dashicons-video-alt2', 'dashicons-video-alt3', 'dashicons-media-archive',
+                'dashicons-media-audio', 'dashicons-media-code', 'dashicons-media-default', 'dashicons-media-document',
+                'dashicons-media-interactive', 'dashicons-media-spreadsheet', 'dashicons-media-text', 'dashicons-media-video',
+                'dashicons-playlist-audio', 'dashicons-playlist-video', 'dashicons-controls-play', 'dashicons-controls-pause',
+            ];
+        }
+
+        return apply_filters('wp_field_icon_library', [], $library);
+    }
+
+    /**
+     * Рендер map (карта Google Maps)
+     */
+    private function render_map(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = $this->get_field_value($field);
+        $value = is_array($value) ? $value : ['lat' => '', 'lng' => ''];
+        $api_key = $field['api_key'] ?? '';
+        $name = $field['name'] ?? $field['id'];
+
+        if (empty($api_key)) {
+            echo '<p class="description">'.esc_html__('Google Maps API key required', 'wp-field').'</p>';
+            $this->render_description($field);
+
+            return;
+        }
+
+        // Подключаем Google Maps API
+        wp_enqueue_script(
+            'google-maps-api',
+            'https://maps.googleapis.com/maps/api/js?key='.urlencode($api_key),
+            [],
+            null,
+            true,
+        );
+
+        echo '<div class="wp-field-map-wrapper">';
+
+        printf(
+            '<input type="hidden" name="%s[lat]" value="%s" class="wp-field-map-lat" />',
+            esc_attr($name),
+            esc_attr($value['lat']),
+        );
+
+        printf(
+            '<input type="hidden" name="%s[lng]" value="%s" class="wp-field-map-lng" />',
+            esc_attr($name),
+            esc_attr($value['lng']),
+        );
+
+        printf(
+            '<div class="wp-field-map" data-zoom="%d" data-center-lat="%s" data-center-lng="%s" style="height:400px;width:100%%;"></div>',
+            absint($field['zoom'] ?? 12),
+            esc_attr($field['center']['lat'] ?? '55.7558'),
+            esc_attr($field['center']['lng'] ?? '37.6173'),
+        );
+
+        echo '</div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер sortable (сортируемый список)
+     */
+    private function render_sortable(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = $this->get_field_value($field);
+        $value = is_array($value) ? $value : [];
+        $options = $field['options'] ?? [];
+        $name = $field['name'] ?? $field['id'];
+
+        if (empty($options)) {
+            echo '<p class="description">'.esc_html__('No options provided', 'wp-field').'</p>';
+
+            return;
+        }
+
+        // Сортируем опции по сохранённому порядку
+        $sorted = [];
+        foreach ($value as $key) {
+            if (isset($options[$key])) {
+                $sorted[$key] = $options[$key];
+            }
+        }
+
+        // Добавляем оставшиеся
+        foreach ($options as $key => $label) {
+            if (! isset($sorted[$key])) {
+                $sorted[$key] = $label;
+            }
+        }
+
+        echo '<ul class="wp-field-sortable">';
+
+        foreach ($sorted as $key => $label) {
+            printf(
+                '<li data-value="%s">
+                    <span class="dashicons dashicons-menu"></span>
+                    <span>%s</span>
+                    <input type="hidden" name="%s[]" value="%s" />
+                </li>',
+                esc_attr($key),
+                esc_html($label),
+                esc_attr($name),
+                esc_attr($key),
+            );
+        }
+
+        echo '</ul>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер sorter (сортировщик с enabled/disabled)
+     */
+    private function render_sorter(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = $this->get_field_value($field);
+        $value = is_array($value) ? $value : ['enabled' => [], 'disabled' => []];
+        $options = $field['options'] ?? [];
+        $name = $field['name'] ?? $field['id'];
+
+        if (empty($options)) {
+            echo '<p class="description">'.esc_html__('No options provided', 'wp-field').'</p>';
+
+            return;
+        }
+
+        $enabled = $value['enabled'] ?? [];
+        $disabled = $value['disabled'] ?? [];
+
+        // Распределяем опции
+        $enabled_items = [];
+        $disabled_items = [];
+
+        foreach ($enabled as $key) {
+            if (isset($options[$key])) {
+                $enabled_items[$key] = $options[$key];
+            }
+        }
+
+        foreach ($options as $key => $label) {
+            if (! isset($enabled_items[$key])) {
+                $disabled_items[$key] = $label;
+            }
+        }
+
+        echo '<div class="wp-field-sorter">';
+
+        // Enabled
+        echo '<div class="wp-field-sorter-column">';
+        echo '<h4>'.esc_html__('Enabled', 'wp-field').'</h4>';
+        echo '<ul class="wp-field-sorter-list" data-type="enabled">';
+
+        foreach ($enabled_items as $key => $label) {
+            printf(
+                '<li data-value="%s">
+                    <span class="dashicons dashicons-menu"></span>
+                    <span>%s</span>
+                    <input type="hidden" name="%s[enabled][]" value="%s" />
+                </li>',
+                esc_attr($key),
+                esc_html($label),
+                esc_attr($name),
+                esc_attr($key),
+            );
+        }
+
+        echo '</ul></div>';
+
+        // Disabled
+        echo '<div class="wp-field-sorter-column">';
+        echo '<h4>'.esc_html__('Disabled', 'wp-field').'</h4>';
+        echo '<ul class="wp-field-sorter-list" data-type="disabled">';
+
+        foreach ($disabled_items as $key => $label) {
+            printf(
+                '<li data-value="%s">
+                    <span class="dashicons dashicons-menu"></span>
+                    <span>%s</span>
+                    <input type="hidden" name="%s[disabled][]" value="%s" />
+                </li>',
+                esc_attr($key),
+                esc_html($label),
+                esc_attr($name),
+                esc_attr($key),
+            );
+        }
+
+        echo '</ul></div></div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер palette (палитра цветов)
+     */
+    private function render_palette(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = $this->get_field_value($field);
+        $palettes = $field['palettes'] ?? [];
+        $name = $field['name'] ?? $field['id'];
+
+        if (empty($palettes)) {
+            echo '<p class="description">'.esc_html__('No palettes provided', 'wp-field').'</p>';
+
+            return;
+        }
+
+        echo '<div class="wp-field-palette">';
+
+        foreach ($palettes as $key => $palette) {
+            $colors = is_array($palette) ? $palette : [$palette];
+            $checked = $value === $key ? 'checked' : '';
+
+            printf(
+                '<label class="wp-field-palette-item %s">
+                    <input type="radio" name="%s" value="%s" %s>
+                    <div class="wp-field-palette-colors">',
+                $checked ? 'selected' : '',
+                esc_attr($name),
+                esc_attr($key),
+                $checked,
+            );
+
+            foreach ($colors as $color) {
+                printf(
+                    '<span class="wp-field-palette-color" style="background-color:%s;"></span>',
+                    esc_attr($color),
+                );
+            }
+
+            echo '</div></label>';
+        }
+
+        echo '</div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер link (поле ссылки с URL и target)
+     */
+    private function render_link(array $field): void
+    {
+        $this->render_label($field);
+
+        $value = $this->get_field_value($field);
+        $value = is_array($value) ? $value : ['url' => '', 'text' => '', 'target' => '_self'];
+        $name = $field['name'] ?? $field['id'];
+
+        echo '<div class="wp-field-link">';
+
+        // URL
+        printf(
+            '<div class="wp-field-link-item">
+                <label>%s</label>
+                <input type="url" name="%s[url]" value="%s" placeholder="https://" class="regular-text">
+            </div>',
+            esc_html__('URL', 'wp-field'),
+            esc_attr($name),
+            esc_attr($value['url']),
+        );
+
+        // Text
+        printf(
+            '<div class="wp-field-link-item">
+                <label>%s</label>
+                <input type="text" name="%s[text]" value="%s" placeholder="%s" class="regular-text">
+            </div>',
+            esc_html__('Link Text', 'wp-field'),
+            esc_attr($name),
+            esc_attr($value['text']),
+            esc_attr__('Click here', 'wp-field'),
+        );
+
+        // Target
+        printf(
+            '<div class="wp-field-link-item">
+                <label>%s</label>
+                <select name="%s[target]">
+                    <option value="_self" %s>%s</option>
+                    <option value="_blank" %s>%s</option>
+                </select>
+            </div>',
+            esc_html__('Target', 'wp-field'),
+            esc_attr($name),
+            selected($value['target'], '_self', false),
+            esc_html__('Same window', 'wp-field'),
+            selected($value['target'], '_blank', false),
+            esc_html__('New window', 'wp-field'),
+        );
+
+        echo '</div>';
+
+        $this->render_description($field);
+    }
+
+    /**
+     * Рендер backup (экспорт/импорт настроек)
+     */
+    private function render_backup(array $field): void
+    {
+        $this->render_label($field);
+
+        $name = $field['name'] ?? $field['id'];
+        $export_data = $field['export_data'] ?? [];
+
+        echo '<div class="wp-field-backup">';
+
+        // Export
+        echo '<div class="wp-field-backup-section">';
+        echo '<h4>'.esc_html__('Export Settings', 'wp-field').'</h4>';
+
+        if (! empty($export_data)) {
+            $json_data = wp_json_encode($export_data, JSON_PRETTY_PRINT);
+            printf(
+                '<textarea readonly class="wp-field-backup-export" rows="10" style="width:100%%;">%s</textarea>',
+                esc_textarea($json_data),
+            );
+            echo '<button type="button" class="button wp-field-backup-copy">'.esc_html__('Copy to Clipboard', 'wp-field').'</button>';
+            echo '<button type="button" class="button wp-field-backup-download">'.esc_html__('Download JSON', 'wp-field').'</button>';
+        } else {
+            echo '<p class="description">'.esc_html__('No data to export', 'wp-field').'</p>';
+        }
+
+        echo '</div>';
+
+        // Import
+        echo '<div class="wp-field-backup-section">';
+        echo '<h4>'.esc_html__('Import Settings', 'wp-field').'</h4>';
+
+        printf(
+            '<textarea name="%s" class="wp-field-backup-import" rows="10" placeholder="%s" style="width:100%%;"></textarea>',
+            esc_attr($name),
+            esc_attr__('Paste JSON data here...', 'wp-field'),
+        );
+
+        echo '<button type="button" class="button button-primary wp-field-backup-validate">'.esc_html__('Validate JSON', 'wp-field').'</button>';
+        echo '<div class="wp-field-backup-status"></div>';
+
+        echo '</div></div>';
+
+        $this->render_description($field);
     }
 }

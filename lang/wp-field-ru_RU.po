@@ -1,0 +1,152 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: WP_Field 2.5.1\n"
+"Report-Msgid-Bugs-To: https://github.com/rwsite/wp-field-plugin/issues\n"
+"POT-Creation-Date: 2025-12-06 01:54:00+03:00\n"
+"PO-Revision-Date: 2025-12-06 01:57:00+03:00\n"
+"Last-Translator: Aleksei Tikhomirov <alex.woop@rwsite.ru>\n"
+"Language-Team: Russian <alex.woop@rwsite.ru>\n"
+"Language: ru_RU\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"X-Generator: Poedit 3.0\n"
+
+#: WP_Field.php:1193
+msgid "Add Item"
+msgstr "Добавить элемент"
+
+#. Author of the plugin
+msgid "Aleksei Tikhomirov"
+msgstr "Алексей Тихомиров"
+
+#: WP_Field.php:2652
+msgid "Click here"
+msgstr "Нажмите здесь"
+
+#: WP_Field.php:2699
+msgid "Copy to Clipboard"
+msgstr "Копировать в буфер"
+
+#: WP_Field.php:2549
+msgid "Disabled"
+msgstr "Отключено"
+
+#: WP_Field.php:2700
+msgid "Download JSON"
+msgstr "Скачать JSON"
+
+#: WP_Field.php:2528
+msgid "Enabled"
+msgstr "Включено"
+
+#: WP_Field.php:2691
+msgid "Export Settings"
+msgstr "Экспорт настроек"
+
+#: WP_Field.php:2392
+msgid "Google Maps API key required"
+msgstr "Требуется API ключ Google Maps"
+
+#. URI of the plugin
+msgid "https://github.com/rwsite/wp-field-plugin"
+msgstr ""
+
+#. Author URI of the plugin
+msgid "https://rwsite.ru"
+msgstr ""
+
+#: WP_Field.php:2709
+msgid "Import Settings"
+msgstr "Импорт настроек"
+
+#: WP_Field.php:2649
+msgid "Link Text"
+msgstr "Текст ссылки"
+
+#: WP_Field.php:2669
+msgid "New window"
+msgstr "Новое окно"
+
+#: WP_Field.php:2702
+msgid "No data to export"
+msgstr "Нет данных для экспорта"
+
+#: WP_Field.php:2446 WP_Field.php:2500
+msgid "No options provided"
+msgstr "Опции не предоставлены"
+
+#: WP_Field.php:2583
+msgid "No palettes provided"
+msgstr "Палитры не предоставлены"
+
+#: WP_Field.php:2714
+msgid "Paste JSON data here..."
+msgstr "Вставьте JSON данные сюда..."
+
+#: WP_Field.php:1226
+msgid "Remove"
+msgstr "Удалить"
+
+#: WP_Field.php:2667
+msgid "Same window"
+msgstr "То же окно"
+
+#: WP_Field.php:2326
+msgid "Search icons..."
+msgstr "Поиск иконок..."
+
+#: WP_Field.php:2319
+msgid "Select Icon"
+msgstr "Выбрать иконку"
+
+#: WP_Field.php:2664
+msgid "Target"
+msgstr "Цель"
+
+#. Description of the plugin
+msgid ""
+"Universal HTML field generator for WordPress with 52 field types, dependency "
+"system, all storage types, and built-in WP components. Minimalist, "
+"extensible library for creating fields in WordPress."
+msgstr ""
+"Универсальный генератор HTML полей для WordPress с 52 типами полей, "
+"системой зависимостей, всеми типами хранения и встроенными компонентами WP. "
+"Минималистичная, расширяемая библиотека для создания полей в WordPress."
+
+#: WP_Field.php:2638
+msgid "URL"
+msgstr "URL"
+
+#: WP_Field.php:2717
+msgid "Validate JSON"
+msgstr "Проверить JSON"
+
+#. Name of the plugin
+msgid "WP_Field — Universal HTML Field Generator"
+msgstr "WP_Field — Универсальный генератор HTML полей"
+
+#: WP_Field.php:892
+msgid "Добавить галерею"
+msgstr "Добавить галерею"
+
+#: WP_Field.php:698 WP_Field.php:772 WP_Field.php:831
+msgid "Загрузить"
+msgstr "Загрузить"
+
+#: WP_Field.php:697 WP_Field.php:771 WP_Field.php:830
+msgid "Не выбрано"
+msgstr "Не выбрано"
+
+#: WP_Field.php:893
+msgid "Редактировать галерею"
+msgstr "Редактировать галерею"
+
+#: WP_Field.php:894
+msgid "Сброс"
+msgstr "Сброс"
+
+#: WP_Field.php:773
+msgid "Удалить"
+msgstr "Удалить"
