@@ -70,11 +70,11 @@ class FieldInitializationTest extends TestCase
     /** @test */
     public function test_creates_field_with_static_make(): void
     {
-        $html = \WP_Field::make([
+        $html = \WP_Field::make([[
             'id'    => 'test',
             'type'  => 'text',
             'label' => 'Test',
-        ], false);
+        ], 'options'], false);
 
         $this->assertIsString($html);
         $this->assertStringContainsString('wp-field', $html);
@@ -84,11 +84,11 @@ class FieldInitializationTest extends TestCase
     public function test_creates_field_with_make_and_output(): void
     {
         ob_start();
-        $result = \WP_Field::make([
+        $result = \WP_Field::make([[
             'id'    => 'test',
             'type'  => 'text',
             'label' => 'Test',
-        ], true);
+        ], 'options'], true);
         $output = ob_get_clean();
 
         $this->assertNull($result);
@@ -104,7 +104,7 @@ class FieldInitializationTest extends TestCase
             'id'    => 'test',
             'type'  => 'text',
             'label' => 'Test',
-        ]);
+        ], 'post', 1);
 
         $this->assertEquals('post', $field->storage_type);
     }
@@ -119,7 +119,7 @@ class FieldInitializationTest extends TestCase
                 'id'    => 'test',
                 'type'  => 'text',
                 'label' => 'Test',
-            ], $type);
+            ], $type, 1);
 
             $this->assertEquals($type, $field->storage_type);
         }

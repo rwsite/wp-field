@@ -155,3 +155,15 @@ if (!function_exists('wp_enqueue_style')) {
         return true;
     }
 }
+
+if (!function_exists('apply_filters')) {
+    function apply_filters($tag, $value, ...$args) {
+        return $value;
+    }
+}
+
+if (!function_exists('get_the_ID')) {
+    function get_the_ID() {
+        return 1;
+    }
+}

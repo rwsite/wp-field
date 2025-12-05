@@ -13,14 +13,32 @@
   "require": {
     "php": ">=8.0"
   },
+  "require-dev": {
+    "pestphp/pest": "^4.1",
+    "laravel/pint": "^1.16",
+    "phpunit/phpunit": "12.4.1"
+  },
   "scripts": {
-    "test": "cd ../../../../plugins/woo2iiko && ./vendor/bin/phpunit lib/wp-field/tests/Unit/FieldInitializationTest.php",
-    "test:all": "cd ../../../../plugins/woo2iiko && composer test",
-    "test:old": "php tests/test-wp-field-v2.4.php"
+    "test": "./vendor/bin/pest --configuration phpunit.xml",
+    "test:unit": "./vendor/bin/pest --configuration phpunit.xml --filter=Unit",
+    "test:feature": "./vendor/bin/pest --configuration phpunit.xml --filter=Feature",
+    "test:coverage": "./vendor/bin/pest --coverage-html coverage/ --coverage-clover coverage/clover.xml --coverage-text",
+    "test:old": "php tests/test-wp-field-v2.4.php",
+    "pint": "./vendor/bin/pint",
+    "pint:check": "./vendor/bin/pint --test -v"
   },
   "scripts-descriptions": {
-    "test": "Запуск PHPUnit тестов WP_Field",
-    "test:all": "Запуск всех тестов проекта",
-    "test:old": "Запуск старых тестов напрямую"
+    "test": "Запуск PEST тестов",
+    "test:unit": "Запуск Unit тестов",
+    "test:feature": "Запуск Feature тестов",
+    "test:coverage": "Запуск тестов с отчётом покрытия",
+    "test:old": "Запуск старых тестов напрямую",
+    "pint": "Форматирование кода через Pint",
+    "pint:check": "Проверка форматирования кода"
+  },
+  "config": {
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
+    }
   }
 }
