@@ -25,9 +25,9 @@ class WP_Field
 {
     public const file = __FILE__;
 
-    /** 
+    /**
      * Типы хранилищ значений
-     * 
+     *
      * Поддерживаемые типы:
      * - post: post meta (get_post_meta)
      * - options: wp_options (get_option)
@@ -38,7 +38,7 @@ class WP_Field
      * - site_option: network/multisite options (get_site_option)
      * - attachment: attachment meta (get_post_meta)
      * - custom_table: пользовательские таблицы БД
-     * 
+     *
      * Можно расширить через фильтр wp_field_storage_types
      */
     public static array $allowed_storage_types = [
@@ -468,6 +468,7 @@ class WP_Field
             isset($field['min']) ? 'min="' . esc_attr($field['min']) . '"' : '',
             isset($field['max']) ? 'max="' . esc_attr($field['max']) . '"' : '',
             isset($field['step']) ? 'step="' . esc_attr($field['step']) . '"' : '',
+            $this->get_field_attributes($field),
             $this->get_readonly_disabled($field)
         );
 
@@ -482,11 +483,12 @@ class WP_Field
         $this->render_label($field);
 
         printf(
-            '<textarea class="%s" id="%s" name="%s" rows="%d" %s>%s</textarea>',
+            '<textarea class="%s" id="%s" name="%s" rows="%d" %s %s>%s</textarea>',
             esc_attr($field['class'] ?? 'regular-text'),
             esc_attr($field['id']),
             esc_attr($field['name'] ?? $field['id']),
             absint($field['rows'] ?? 5),
+            $this->get_field_attributes($field),
             $this->get_readonly_disabled($field),
             esc_textarea($this->get_field_value($field))
         );
@@ -503,11 +505,17 @@ class WP_Field
 
         $multiple = !empty($field['multiple']) ? ' multiple="multiple"' : '';
 
+        // Для multiselect добавляем [] к имени, чтобы PHP получил массив значений
+        $name = $field['name'] ?? $field['id'];
+        if (!empty($field['multiple']) && !str_ends_with($name, '[]')) {
+            $name .= '[]';
+        }
+
         printf(
             '<select class="%s" id="%s" name="%s"%s %s>%s</select>',
             esc_attr($field['class'] ?? ''),
             esc_attr($field['id']),
-            esc_attr($field['name'] ?? $field['id']),
+            esc_attr($name),
             $multiple,
             $this->get_field_attributes($field),
             $this->render_select_options($field)
@@ -680,7 +688,7 @@ class WP_Field
         $placeholder = $field['placeholder'] ?? __('Не выбрано', 'wp-field');
         $button_text = $field['button_text'] ?? __('Загрузить', 'wp-field');
         $library = $field['library'] ?? ''; // image, video, audio
-        
+
         // Получаем URL файла если есть ID
         $file_url = '';
         $file_name = '';
@@ -693,7 +701,7 @@ class WP_Field
         }
 
         echo '<div class="wp-field-media-wrapper">';
-        
+
         // Поле ввода с placeholder
         if ($url) {
             printf(
@@ -702,7 +710,7 @@ class WP_Field
                 esc_attr($placeholder)
             );
         }
-        
+
         // Hidden поле для ID
         printf(
             '<input type="hidden" id="%s" name="%s" value="%s" class="wp-field-media-id">',
@@ -718,14 +726,14 @@ class WP_Field
             esc_attr($library),
             esc_html($button_text)
         );
-        
+
         // Превью если включено
         if ($preview && $file_url) {
             $mime_type = '';
             if (is_numeric($value)) {
                 $mime_type = get_post_mime_type($value);
             }
-            
+
             echo '<div class="wp-field-media-preview">';
             if (strpos($mime_type, 'image') !== false || (!$mime_type && preg_match('/\.(jpg|jpeg|png|gif|webp|svg)$/i', $file_url))) {
                 printf('<img src="%s" alt="">', esc_url($file_url));
@@ -734,7 +742,7 @@ class WP_Field
             }
             echo '</div>';
         }
-        
+
         echo '</div>';
 
         $this->render_description($field);
@@ -754,9 +762,9 @@ class WP_Field
         $placeholder = $field['placeholder'] ?? __('Не выбрано', 'wp-field');
         $button_text = $field['button_text'] ?? __('Загрузить', 'wp-field');
         $remove_text = $field['remove_text'] ?? __('Удалить', 'wp-field');
-        
+
         echo '<div class="wp-field-image-wrapper">';
-        
+
         // Поле ввода с URL если включено
         if ($url) {
             printf(
@@ -765,7 +773,7 @@ class WP_Field
                 esc_attr($placeholder)
             );
         }
-        
+
         // Hidden поле для ID
         printf(
             '<input type="hidden" id="%s" name="%s" value="%s" class="wp-field-image-id">',
@@ -780,7 +788,7 @@ class WP_Field
             esc_attr($field['id']),
             esc_html($button_text)
         );
-        
+
         if ($value) {
             printf(
                 '<button type="button" class="button wp-field-image-remove" data-field-id="%s">%s</button>',
@@ -788,14 +796,14 @@ class WP_Field
                 esc_html($remove_text)
             );
         }
-        
+
         // Превью если включено
         if ($preview && $src) {
             echo '<div class="wp-field-image-preview-wrapper">';
             printf('<img src="%s" alt="" class="wp-field-image-preview">', esc_url($src));
             echo '</div>';
         }
-        
+
         echo '</div>';
 
         $this->render_description($field);
@@ -813,7 +821,7 @@ class WP_Field
         $placeholder = $field['placeholder'] ?? __('Не выбрано', 'wp-field');
         $button_text = $field['button_text'] ?? __('Загрузить', 'wp-field');
         $library = $field['library'] ?? ''; // image, video, audio
-        
+
         // Получаем URL файла если есть ID
         $file_url = '';
         $file_name = '';
@@ -826,7 +834,7 @@ class WP_Field
         }
 
         echo '<div class="wp-field-file-wrapper">';
-        
+
         // Поле ввода с URL если включено
         if ($url) {
             printf(
@@ -835,7 +843,7 @@ class WP_Field
                 esc_attr($placeholder)
             );
         }
-        
+
         // Hidden поле для ID
         printf(
             '<input type="hidden" id="%s" name="%s" value="%s" class="wp-field-file-id">',
@@ -851,12 +859,12 @@ class WP_Field
             esc_attr($library),
             esc_html($button_text)
         );
-        
+
         // Показываем имя файла если выбран
         if ($file_name) {
             printf('<span class="wp-field-file-name">%s</span>', esc_html($file_name));
         }
-        
+
         echo '</div>';
 
         $this->render_description($field);
@@ -871,13 +879,13 @@ class WP_Field
 
         $value = $this->get_field_value($field);
         $ids = is_array($value) ? $value : array_filter(explode(',', $value));
-        
+
         $add_text = $field['add_button'] ?? __('Добавить галерею', 'wp-field');
         $edit_text = $field['edit_button'] ?? __('Редактировать галерею', 'wp-field');
         $remove_text = $field['clear_button'] ?? __('Сброс', 'wp-field');
 
         echo '<div class="wp-field-gallery-wrapper">';
-        
+
         // Hidden поле для хранения ID изображений
         printf(
             '<input type="hidden" id="%s" name="%s" value="%s" class="wp-field-gallery-ids">',
@@ -885,7 +893,7 @@ class WP_Field
             esc_attr($field['name'] ?? $field['id']),
             esc_attr(implode(',', $ids))
         );
-        
+
         // Контейнер для превью изображений
         echo '<div class="wp-field-gallery-preview">';
         if (!empty($ids)) {
@@ -904,7 +912,7 @@ class WP_Field
             }
         }
         echo '</div>';
-        
+
         // Кнопки управления
         echo '<div class="wp-field-gallery-buttons">';
         printf(
@@ -923,7 +931,7 @@ class WP_Field
             esc_html($remove_text)
         );
         echo '</div>';
-        
+
         echo '</div>';
 
         $this->render_description($field);
@@ -935,7 +943,7 @@ class WP_Field
     private function render_color(array $field): void
     {
         $this->render_label($field);
-        
+
         $value = $this->get_field_value($field);
         $default = $field['default'] ?? '#000000';
         $alpha = isset($field['alpha']) && $field['alpha'] === false ? 'false' : 'true';
@@ -1140,16 +1148,16 @@ class WP_Field
         $unit = $field['unit'] ?? '';
 
         echo '<div class="wp-field-spinner">';
-        
+
         // Кнопка уменьшения
         printf(
             '<button type="button" class="wp-field-spinner-btn wp-field-spinner-down" data-step="%s">◄</button>',
             esc_attr($step)
         );
-        
+
         // Обёртка для input + unit
         echo '<div class="wp-field-spinner-input-wrap">';
-        
+
         printf(
             '<input type="number" name="%s" value="%s" min="%s" max="%s" step="%s" %s %s />',
             esc_attr($field['name'] ?? $field['id']),
@@ -1160,20 +1168,20 @@ class WP_Field
             $this->get_field_attributes($field),
             $this->get_readonly_disabled($field)
         );
-        
+
         // Unit внутри обёртки справа
         if ($unit) {
             printf('<span class="wp-field-spinner-unit">%s</span>', esc_html($unit));
         }
-        
+
         echo '</div>';
-        
+
         // Кнопка увеличения
         printf(
             '<button type="button" class="wp-field-spinner-btn wp-field-spinner-up" data-step="%s">►</button>',
             esc_attr($step)
         );
-        
+
         echo '</div>';
 
         $this->render_description($field);
@@ -1359,7 +1367,7 @@ class WP_Field
 
         // Поддерживаем оба варианта: items и sections
         $items = $field['items'] ?? $field['sections'] ?? [];
-        
+
         if (empty($items) || !is_array($items)) {
             echo '<p class="description">No items provided</p>';
             return;
@@ -1417,7 +1425,7 @@ class WP_Field
         }
 
         $field_id = esc_attr($field['id']);
-        
+
         // Определяем, какая вкладка должна быть активной по умолчанию
         $default_active_index = 0;
         foreach ($field['tabs'] as $index => $tab) {
@@ -2585,10 +2593,12 @@ class WP_Field
     private function is_value_selected($current_value, $compare_value): bool
     {
         if (is_array($current_value)) {
-            return in_array($compare_value, $current_value, true);
+            // Для массива проверяем и строгое, и нестрогое сравнение (для совместимости с числовыми ключами)
+            return in_array($compare_value, $current_value, true) || in_array((string)$compare_value, $current_value, true);
         }
 
-        return $current_value == $compare_value;
+        // Приводим к строке для корректного сравнения (избегаем 0 == '' = true)
+        return (string)$current_value === (string)$compare_value;
     }
 
     /**
@@ -2652,28 +2662,28 @@ class WP_Field
         switch ($this->storage_type) {
             case 'options':
                 return get_option($key, null);
-                
+
             case 'term':
                 return get_term_meta($id, $key, true);
-                
+
             case 'user':
                 return get_user_meta($id, $key, true);
-                
+
             case 'comment':
                 return get_comment_meta($id, $key, true);
-                
+
             case 'nav_menu_item':
                 return get_post_meta($id, $key, true); // nav_menu_item - это посты
-                
+
             case 'site_option':
                 return get_site_option($key, null);
-                
+
             case 'attachment':
                 return get_post_meta($id, $key, true); // attachment - это посты
-                
+
             case 'custom_table':
                 return $this->get_custom_table_value($key, $id);
-                
+
             case 'post':
             default:
                 return get_post_meta($id ?: get_the_ID(), $key, true);
@@ -2690,12 +2700,12 @@ class WP_Field
     private function get_custom_table_value(string $key, int $id)
     {
         global $wpdb;
-        
+
         $table_name = $this->field['table'] ?? $wpdb->prefix . 'custom_meta';
         $object_id_column = $this->field['object_id_column'] ?? 'object_id';
         $meta_key_column = $this->field['meta_key_column'] ?? 'meta_key';
         $meta_value_column = $this->field['meta_value_column'] ?? 'meta_value';
-        
+
         return $wpdb->get_var($wpdb->prepare(
             "SELECT {$meta_value_column} FROM {$table_name} WHERE {$object_id_column} = %d AND {$meta_key_column} = %s",
             $id,
